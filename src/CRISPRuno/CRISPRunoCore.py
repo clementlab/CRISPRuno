@@ -5304,8 +5304,6 @@ def trim_left_primer_from_read(read, ssw_align, min_score=40, allow_indels_in_or
         trimmed_read_seq: portion of the read after the primer
         trimmed_primer_pos: end index of primer that was trimmed. Note the length of the primer is this value + 1
     """
-
-    debug=True
     ssw_res = ssw_align.align(read)
     if debug:
         print('================')
