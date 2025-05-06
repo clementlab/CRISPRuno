@@ -25,7 +25,7 @@ from CRISPResso2 import CRISPResso2Align
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
 
-__version__ = "v0.1.17"
+__version__ = "v0.1.18"
 
 
 def processCRISPRuno(settings):
@@ -193,6 +193,7 @@ def processCRISPRuno(settings):
                 suppress_dedup_on_aln_pos_and_UMI_filter=settings['suppress_dedup_on_aln_pos_and_UMI_filter'],
                 dedup_by_final_cut_assignment_and_UMI=settings['dedup_by_final_cut_assignment_and_UMI'],
                 suppress_r2_support_filter=settings['suppress_r2_support_filter'],
+                min_alignment_quality_score=settings['min_alignment_quality_score'],
                 suppress_poor_alignment_filter=settings['suppress_poor_alignment_filter'],
                 write_discarded_read_info=settings['write_discarded_read_info'],
                 samtools_command=settings['samtools_command'],
@@ -386,6 +387,7 @@ def parse_settings(args):
 
     # min alignment cutoffs for alignment to each arm/side of read
     a_group = parser.add_argument_group('Alignment cutoff parameters')
+    a_group.add_argument('--min_alignment_quality_score', type=int, help='minimum alignment quality score to accept alignment', default=30)
     a_group.add_argument('--arm_min_matched_start_bases', type=int, help='Number of bases that are required to be matching (no indels or mismatches) at the beginning of the read on each "side" of the alignment. E.g. if arm_min_matched_start_bases is set to 5, the first and last 5bp of the read alignment would have to match exactly to the aligned location.', default=10)
     a_group.add_argument('--arm_max_clipped_bases', type=int, help='Maximum number of clipped bases at the beginning of the alignment. Bowtie2 alignment marks reads on the beginning or end of the read as "clipped" if they do not align to the genome. This could arise from CRISPR-induced insertions, or bad alignments. ' + \
         'We would expect to see clipped bases only on one side. This parameter sets the threshold for clipped bases on both sides of the read.  E.g. if arm_max_clipped_bases is 0, read alignments with more than 0bp on the right AND left side of the alignment would be discarded. An alignment with 5bp clipped on the left and 0bp clipped on the right would be accepted. An alignment with 5bp clipped on the left and 3bp clipped on the right would be discarded.', default=0)
@@ -633,6 +635,11 @@ def parse_settings(args):
     if 'transposase_adapter_seq' in settings_file_args:
         settings['transposase_adapter_seq'] = settings_file_args['transposase_adapter_seq']
         settings_file_args.pop('transposase_adapter_seq')
+
+    settings['min_alignment_quality_score'] = cmd_args.min_alignment_quality_score
+    if 'min_alignment_quality_score' in settings_file_args:
+        settings['min_alignment_quality_score'] = int(settings_file_args['min_alignment_quality_score'])
+        settings_file_args.pop('min_alignment_quality_score')
 
     settings['arm_min_matched_start_bases'] = cmd_args.arm_min_matched_start_bases
     if 'arm_min_matched_start_bases' in settings_file_args:
@@ -1645,7 +1652,7 @@ def analyze_UMIs_initial(root,fastq_r1,fastq_r2,umi_regex,dedup_input_on_UMI=Fal
     if umi_regex is None:
         count_with_regex = tot_read_count
 
-    logger.info('Wrote %d reads'%post_analyze_UMI_count)
+    logger.info('Wrote %d reads with UMIs'%post_analyze_UMI_count)
     with open(analyze_UMI_stats_file,'w') as fout:
         fout.write("# experiment_had_UMIs (bool): whether the experiment had UMIs or not\n")
         fout.write("# fastq_analyze_UMI_r1 (str): file containing analyzed reads - filtered for correct UMIs if umi_regex is provided, and deduplicated if dedup_input_on_UMI is provided\n")
@@ -2063,7 +2070,7 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
     cut_sites,cut_annotations,cut_classification_annotations,cut_region_annotation_file,guide_seqs,cleavage_offset,min_primer_length,genome,r1_r2_support_max_distance=100000,
     novel_cut_merge_distance=50,known_cut_merge_distance=50,origin_cut_merge_distance=10000,short_indel_length_cutoff=50,guide_homology_max_gaps=2,guide_homology_max_mismatches=5,
     arm_min_matched_start_bases=10,arm_max_clipped_bases=0,genome_map_resolution=1000000,crispresso_max_indel_size=50,suppress_dedup_on_aln_pos_and_UMI_filter=False,
-    dedup_by_final_cut_assignment_and_UMI=True,suppress_r2_support_filter=False,suppress_poor_alignment_filter=False,write_discarded_read_info=False,experiment_had_UMIs=False,
+    dedup_by_final_cut_assignment_and_UMI=True,suppress_r2_support_filter=False,min_alignment_quality_score=30,suppress_poor_alignment_filter=False,write_discarded_read_info=False,experiment_had_UMIs=False,
     samtools_command='samtools',keep_intermediate=False,suppress_homology_detection=False,suppress_plots=False,can_use_previous_analysis=False):
     """
     Makes final read assignments
@@ -2096,6 +2103,7 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
         suppress_dedup_on_aln_pos_and_UMI_filter: if true, suppresses the filter to remove reads with the same UMI and alignment positions. If false, reads with the same UMI and alignment positions will be removed.
         dedup_by_final_cut_assignment_and_UMI: if true, deduplicates based on final cut assignment - so that reads with the same UMI with different start/stop alignment positions will be deduplicated if they are assigned to the same final cut position
         suppress_r2_support_filter: if true, reads without r2 support will be included in final analysis and counts. If false, reads without r2 support will be filtered from the final analysis.
+        min_alignment_quality_score: minimum alignment quality score for a read to be included in the final analysis
         suppress_poor_alignment_filter: if true, reads with poor alignment (fewer than --arm_min_matched_start_bases matches at the alignment ends or more than --arm_max_clipped_bases on both sides of the read) are included in the final analysis and counts. If false, reads with poor alignment are filtered from the final analysis.
         experiment_had_UMIs (bool): True if experiment had UMIs. If false, sample is not deduplicated on UMIs
         write_discarded_read_info: if true, files are written containing info for reads that are discarded from final analysis
@@ -2316,11 +2324,18 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                 continue
             total_r1_processed += 1
 
-            read_is_not_primary_alignment = int(line_els[1]) & 0x100
+            read_is_not_primary_alignment = int(line_els[4]) & 0x100
             if read_is_not_primary_alignment:
                 discarded_reads_unaligned += 1
                 if write_discarded_read_info:
                     fout_discarded.write(line_els[0]+'\tUnaligned\t'+line_els[1]+"\n")
+                continue
+
+            read_alignment_quality = int(line_els[4])
+            if read_alignment_quality < min_alignment_quality_score:
+                discarded_reads_poor_alignment += 1
+                if write_discarded_read_info:
+                    fout_discarded.write(line_els[0]+'\tLow quality alignment\t'+line_els[4]+"\n")
                 continue
 
             line_unmapped = int(line_els[1]) & 0x4
@@ -2344,11 +2359,11 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
 
             cigar_str = line_els[5]
             start_clipped = 0
-            m = re.match(r"^(\d+)S\d",cigar_str)
+            m = re.search(r"^(\d+)S\d",cigar_str)
             if m:
                 start_clipped = int(m.group(1))
             end_clipped = 0
-            m = re.match(r"(\d+)S$",cigar_str)
+            m = re.search(r"(\d+)S$",cigar_str)
             if m:
                 end_clipped = int(m.group(1))
 
@@ -2907,9 +2922,10 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
 
             #finish iterating through read ids
         #close final file
-    logger.info('Processed %d reads.'%(final_total_count))
+    logger.info('Processed %d reads'%(final_total_count))
+    logger.info('Creating summary plots')
 
-    #set classificatino label order
+    #set classification label order
     classification_labels = []
     if origin_chr is not None:
         classification_labels = ['Linear'] #linear goes first in order
@@ -4652,7 +4668,7 @@ def getLeftRightMismatchesMDZ(mdz_str):
     The MD string consists of the following items, concatenated without additional delimiter characters:
       [0-9]+, indicating a run of reference bases that are identical to the corresponding SEQ bases;
       [A-Z], identifying a single reference base that differs from the SEQ base aligned at that position;
-      \^[A-Z]+, identifying a run of reference bases that have been deleted in the alignment.
+      ^[A-Z]+, identifying a run of reference bases that have been deleted in the alignment.
 
     Args:
         mdz_str: MD:Z string from alignment
@@ -5275,6 +5291,11 @@ def trim_primers_pair(fastq_r1,fastq_r2,fastq_r1_trimmed,fastq_r2_trimmed,min_pr
             f1_out.write(new_f1_id_line + "\n" + trimmed_seq + "\n" + f1_plus_line + new_f1_qual_line + "\n")
             f2_out.write(f2_id_line + "\n" + f2_trimmed_seq + "\n" + f2_plus_line + new_f2_qual_line + "\n")
         elif len(primer_seq) > 0:
+            print('primer_seq', primer_seq)
+            print('trimmed_seq', trimmed_seq)
+            print('trimmed_primer_pos', trimmed_primer_pos)
+            print('len(primer_seq)', str(len(primer_seq)))
+            asdf()
             too_short_read_count += 1
         else:
             untrimmed_read_count += 1

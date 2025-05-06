@@ -6,20 +6,24 @@ with open('README.md') as readme_file:
 
 requirements = [
         'pandas',
+        'biopython',
         'matplotlib',
         'seaborn',
         'jinja2',
         'scipy',
         'numpy',
+        'cutadapt',
         ]
 
 test_requirements = [ 
         'pandas',
+        'biopython',
         'matplotlib',
         'seaborn',
         'jinja2',
         'scipy',
         'numpy',
+        'cutadapt',
         'unittest',
         ]
 
