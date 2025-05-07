@@ -1857,6 +1857,7 @@ def filter_on_primer(root,fastq_r1,fastq_r2,origin_seq,min_primer_aln_score,allo
     logger.info('Filtering and trimming primers from reads')
 
     post_trim_read_count = 'NA'
+    too_short_origin_match_count = 'NA'
     too_short_read_count = 'NA'
     untrimmed_read_count = 'NA'
     #prep for alignments using ssw
@@ -1868,14 +1869,14 @@ def filter_on_primer(root,fastq_r1,fastq_r2,origin_seq,min_primer_aln_score,allo
     if fastq_r2 is None:
         filtered_on_primer_fastq_r1 = root + ".has_primer.fq.gz"
         filtered_on_primer_fastq_r2 = None
-        post_trim_read_count, too_short_read_count, untrimmed_read_count = trim_primers_single(fastq_r1,filtered_on_primer_fastq_r1,min_primer_aln_score,allow_indels_in_origin_aln,min_primer_length,ssw_align_primer)
+        post_trim_read_count, too_short_origin_match_count, untrimmed_read_count = trim_primers_single(fastq_r1,filtered_on_primer_fastq_r1,min_primer_aln_score,allow_indels_in_origin_aln,min_primer_length,ssw_align_primer)
     else:
         filtered_on_primer_fastq_r1 = root + ".r1.has_primer.fq.gz"
         filtered_on_primer_fastq_r2 = root + ".r2.has_primer.fq.gz"
         rc_origin_seq = reverse_complement(origin_seq)
         ssw_primer_rc = ssw_lib.CSsw(sLibPath)
         ssw_align_primer_rc = SSWPrimerAlign(ssw_primer_rc,rc_origin_seq)
-        post_trim_read_count, too_short_read_count, untrimmed_read_count = trim_primers_pair(fastq_r1,fastq_r2,filtered_on_primer_fastq_r1,filtered_on_primer_fastq_r2,min_primer_aln_score,allow_indels_in_origin_aln,min_primer_length,ssw_align_primer,ssw_align_primer_rc)
+        post_trim_read_count, too_short_origin_match_count, untrimmed_read_count = trim_primers_pair(fastq_r1,fastq_r2,filtered_on_primer_fastq_r1,filtered_on_primer_fastq_r2,min_primer_aln_score,allow_indels_in_origin_aln,min_primer_length,ssw_align_primer,ssw_align_primer_rc)
 
     contain_adapter_count = 0
     filtered_too_short_adapter_count = 0
@@ -1912,7 +1913,6 @@ def filter_on_primer(root,fastq_r1,fastq_r2,origin_seq,min_primer_aln_score,allo
 
         if post_trim_read_count == 'NA' or adapter_too_short_read_count == 'NA':
             logger.error('Could not parse trim read count from file ' + cutadapt_transposase_log)
-        too_short_read_count += adapter_too_short_read_count
 
         if not keep_intermediate:
             logger.debug('Deleting intermediate fastq files trimmed for primers')
@@ -1924,8 +1924,8 @@ def filter_on_primer(root,fastq_r1,fastq_r2,origin_seq,min_primer_aln_score,allo
         filtered_on_primer_fastq_r2 = filtered_for_adapters_fastq_r2
 
     #plot summary
-    filter_labels = ['Filtered: too short','Filtered: no primer','Retained']
-    values = [too_short_read_count,untrimmed_read_count,post_trim_read_count]
+    filter_labels = ['Filtered: no primer','Filtered: origin match too short','Filtered: trimmed read too short','Retained']
+    values = [untrimmed_read_count,too_short_origin_match_count,adapter_too_short_read_count,post_trim_read_count]
     filter_on_primer_plot_obj_root = root + ".counts"
     with open(filter_on_primer_plot_obj_root+".txt",'w') as summary:
         summary.write("\t".join(filter_labels)+"\n")
