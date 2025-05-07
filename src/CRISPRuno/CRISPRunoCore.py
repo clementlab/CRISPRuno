@@ -1858,8 +1858,8 @@ def filter_on_primer(root,fastq_r1,fastq_r2,origin_seq,min_primer_aln_score,allo
 
     post_trim_read_count = 'NA'
     too_short_origin_match_count = 'NA'
-    too_short_read_count = 'NA'
     untrimmed_read_count = 'NA'
+    adapter_too_short_read_count = 'NA'
     #prep for alignments using ssw
 
     sLibPath = os.path.dirname(os.path.abspath(__file__))+"/lib/ssw"
@@ -1899,7 +1899,6 @@ def filter_on_primer(root,fastq_r1,fastq_r2,origin_seq,min_primer_aln_score,allo
         if not os.path.exists(cutadapt_transposase_log):
             logger.error('Error found while running command:\n'+trim_command+"\nOutput: "+trim_result)
 
-        adapter_too_short_read_count = 'NA'
         post_trim_read_count = 'NA' #overwrites post_trim_read_count above - ok because this is the final number if adapter seqs are given
         with open(cutadapt_transposase_log,'r') as fin:
             for line in fin:
