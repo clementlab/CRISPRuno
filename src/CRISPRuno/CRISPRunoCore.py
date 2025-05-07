@@ -5291,11 +5291,6 @@ def trim_primers_pair(fastq_r1,fastq_r2,fastq_r1_trimmed,fastq_r2_trimmed,min_pr
             f1_out.write(new_f1_id_line + "\n" + trimmed_seq + "\n" + f1_plus_line + new_f1_qual_line + "\n")
             f2_out.write(f2_id_line + "\n" + f2_trimmed_seq + "\n" + f2_plus_line + new_f2_qual_line + "\n")
         elif len(primer_seq) > 0:
-            print('primer_seq', primer_seq)
-            print('trimmed_seq', trimmed_seq)
-            print('trimmed_primer_pos', trimmed_primer_pos)
-            print('len(primer_seq)', str(len(primer_seq)))
-            asdf()
             too_short_read_count += 1
         else:
             untrimmed_read_count += 1
