@@ -25,7 +25,7 @@ from CRISPResso2 import CRISPResso2Align
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
 
-__version__ = "v0.1.18"
+__version__ = "v0.1.19"
 
 
 def processCRISPRuno(settings):
@@ -153,6 +153,7 @@ def processCRISPRuno(settings):
                 bowtie2_reference=settings['bowtie2_genome'],
                 bowtie2_command=settings['bowtie2_command'],
                 bowtie2_threads=settings['n_processes'],
+                analyze_multimap_assignments=settings['analyze_multimap_assignments'],
                 samtools_command=settings['samtools_command'],
                 keep_intermediate=settings['keep_intermediate'],
                 can_use_previous_analysis=settings['can_use_previous_analysis']
@@ -195,6 +196,7 @@ def processCRISPRuno(settings):
                 suppress_r2_support_filter=settings['suppress_r2_support_filter'],
                 min_alignment_quality_score=settings['min_alignment_quality_score'],
                 suppress_poor_alignment_filter=settings['suppress_poor_alignment_filter'],
+                analyze_multimap_assignments=settings['analyze_multimap_assignments'],
                 write_discarded_read_info=settings['write_discarded_read_info'],
                 samtools_command=settings['samtools_command'],
                 keep_intermediate=settings['keep_intermediate'],
@@ -411,6 +413,9 @@ def parse_settings(args):
     p_group.add_argument('--casoffinder_command', help='Command to run casoffinder', default='cas-offinder')
     p_group.add_argument('--n_processes', type=str, help='Number of processes to run on (may be set to "max")', default='1')
 
+    #alignment parameters
+    a_group = parser.add_argument_group('Alignment parameters')
+    a_group.add_argument('--analyze_multimap_assignments', help='If set, reads that map to multiple locations will be analyzed and assigned to locations near known cut sites. If not set, only the primary alignment (as specified by the aligner) will be used', action='store_true')
 
     #umi settings
     u_group = parser.add_argument_group('UMI parameters')
@@ -660,6 +665,11 @@ def parse_settings(args):
     if 'suppress_poor_alignment_filter' in settings_file_args:
         settings['suppress_poor_alignment_filter'] = (settings_file_args['suppress_poor_alignment_filter'].lower() == 'true')
         settings_file_args.pop('suppress_poor_alignment_filter')
+
+    settings['analyze_multimap_assignments'] = cmd_args.analyze_multimap_assignments
+    if 'analyze_multimap_assignments' in settings_file_args:
+        settings['analyze_multimap_assignments'] = (settings_file_args['analyze_multimap_assignments'].lower() == 'true')
+        settings_file_args.pop('analyze_multimap_assignments')
 
     settings['run_crispresso_on_novel_sites'] = cmd_args.run_crispresso_on_novel_sites
     if 'run_crispresso_on_novel_sites' in settings_file_args:
@@ -1198,7 +1208,7 @@ def prep_input(root, primer_seq, min_primer_length, guide_seqs, cleavage_offset,
                 try:
                     cut_loc = int(line_els[1])
                 except ValueError:
-                    logger.warn('Could not parse line %s from additional cut site file %s. Integer expected in column 2 (got %s).'%(line.strip(),additional_cut_site_file,line_els[1]))
+                    logger.warning('Could not parse line %s from additional cut site file %s. Integer expected in column 2 (got %s).'%(line.strip(),additional_cut_site_file,line_els[1]))
                     continue
                 cut_chr = line_els[0]
                 cut_orientation = line_els[2]
@@ -1975,7 +1985,7 @@ def filter_on_primer(root,fastq_r1,fastq_r2,origin_seq,min_primer_aln_score,allo
 
     return(filtered_on_primer_fastq_r1,filtered_on_primer_fastq_r2,post_trim_read_count,filter_on_primer_plot_obj)
 
-def align_reads(root,fastq_r1,fastq_r2,bowtie2_reference,bowtie2_command='bowtie2',bowtie2_threads=1,use_old_bowtie=False,samtools_command='samtools',keep_intermediate=False,can_use_previous_analysis=False):
+def align_reads(root,fastq_r1,fastq_r2,bowtie2_reference,bowtie2_command='bowtie2',bowtie2_threads=1,use_old_bowtie=False,analyze_multimap_assignments=False,samtools_command='samtools',keep_intermediate=False,can_use_previous_analysis=False):
     """
     Aligns reads to the provided reference
 
@@ -1987,6 +1997,7 @@ def align_reads(root,fastq_r1,fastq_r2,bowtie2_reference,bowtie2_command='bowtie
         bowtie2_command: location of bowtie2 to run
         bowtie2_threads: number of threads to run bowtie2 with
         use_old_bowtie: boolean for whether to use old bowtie2 version. Versions before v2.3.4.2 didn't implement the '--soft-clipped-unmapped-tlen' option
+        analyze_multimap_assignments: if true, bowtie will be run in multimapping mode (-a option) and the output will be analyzed for multimapping assignments
         samtools_command: location of samtools to run
         keep_intermediate: whether to keep intermediate files (if False, intermediate files will be deleted)
         can_use_previous_analysis: boolean for whether we can use previous analysis or whether the params have changed and we have to rerun from scratch
@@ -2014,19 +2025,18 @@ def align_reads(root,fastq_r1,fastq_r2,bowtie2_reference,bowtie2_command='bowtie
     if use_old_bowtie:
         tlen_option = ""
 
+    multimap_aln_option = ""
+    multimap_samtools_option = ""
+    if analyze_multimap_assignments: 
+        multimap_aln_option = "-a " #report all alignments
+    else:
+        multimap_samtools_option = "-F 256 " #filter out secondary alignments
+
 
     bowtie_log = root + '.bowtie2Log'
     if fastq_r2 is not None: #paired-end reads
         logger.info('Aligning paired reads using %s'%(bowtie2_command))
-        aln_command = '{bowtie2_command} --seed 2248 --sam-no-qname-trunc --very-sensitive-local {tlen_option} --threads {bowtie2_threads} -x {bowtie2_reference} -1 {fastq_r1} -2 {fastq_r2} | {samtools_command} view -F 256 -Shu - | {samtools_command} sort -o {mapped_bam_file} - && {samtools_command} index {mapped_bam_file}'.format(
-                bowtie2_command=bowtie2_command,
-                tlen_option=tlen_option,
-                bowtie2_threads=bowtie2_threads,
-                bowtie2_reference=bowtie2_reference,
-                fastq_r1=fastq_r1,
-                fastq_r2=fastq_r2,
-                samtools_command=samtools_command,
-                mapped_bam_file=mapped_bam_file)
+        aln_command = f'{bowtie2_command} --seed 2248 --sam-no-qname-trunc --very-sensitive-local {tlen_option} {multimap_aln_option} --threads {bowtie2_threads} -x {bowtie2_reference} -1 {fastq_r1} -2 {fastq_r2} | {samtools_command} view {multimap_samtools_option} -Shu - | {samtools_command} sort -o {mapped_bam_file} - && {samtools_command} index {mapped_bam_file}'
         logger.debug(aln_command)
         aln_result = subprocess.check_output(aln_command,shell=True,stderr=subprocess.STDOUT).decode(sys.stdout.encoding)
         if 'error' in aln_result.lower():
@@ -2069,11 +2079,11 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
     cut_sites,cut_annotations,cut_classification_annotations,cut_region_annotation_file,guide_seqs,cleavage_offset,min_primer_length,genome,r1_r2_support_max_distance=100000,
     novel_cut_merge_distance=50,known_cut_merge_distance=50,origin_cut_merge_distance=10000,short_indel_length_cutoff=50,guide_homology_max_gaps=2,guide_homology_max_mismatches=5,
     arm_min_matched_start_bases=10,arm_max_clipped_bases=0,genome_map_resolution=1000000,crispresso_max_indel_size=50,suppress_dedup_on_aln_pos_and_UMI_filter=False,
-    dedup_by_final_cut_assignment_and_UMI=True,suppress_r2_support_filter=False,min_alignment_quality_score=30,suppress_poor_alignment_filter=False,write_discarded_read_info=False,experiment_had_UMIs=False,
+    dedup_by_final_cut_assignment_and_UMI=True,suppress_r2_support_filter=False,min_alignment_quality_score=30,suppress_poor_alignment_filter=False,analyze_multimap_assignments=False,write_discarded_read_info=False,experiment_had_UMIs=False,
     samtools_command='samtools',keep_intermediate=False,suppress_homology_detection=False,suppress_plots=False,can_use_previous_analysis=False):
     """
     Makes final read assignments
-        First, all reads aligned to the genome are analyzed. The 
+
 
     Args:
         root: root for written files
@@ -2104,6 +2114,7 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
         suppress_r2_support_filter: if true, reads without r2 support will be included in final analysis and counts. If false, reads without r2 support will be filtered from the final analysis.
         min_alignment_quality_score: minimum alignment quality score for a read to be included in the final analysis
         suppress_poor_alignment_filter: if true, reads with poor alignment (fewer than --arm_min_matched_start_bases matches at the alignment ends or more than --arm_max_clipped_bases on both sides of the read) are included in the final analysis and counts. If false, reads with poor alignment are filtered from the final analysis.
+        analyze_multimap_assignments: if true, reads that map to multiple locations will be analyzed and assigned to cuts. The alignment that is nearest a Programmed or Origin cut site will be used. If false, only the first alignment will be used for assignment.
         experiment_had_UMIs (bool): True if experiment had UMIs. If false, sample is not deduplicated on UMIs
         write_discarded_read_info: if true, files are written containing info for reads that are discarded from final analysis
         samtools_command: location of samtools to run
@@ -2147,8 +2158,8 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
         with open (info_file,'r') as fin:
             head_line = fin.readline()
             line_els = fin.readline().rstrip('\n').split("\t")
-            if len(line_els) == 9:
-                (total_reads_processed,total_r1_processed,discarded_reads_unaligned,discarded_reads_duplicates,discarded_reads_not_supported_by_R2,discarded_reads_poor_alignment,final_total_count,found_cut_point_total,final_cut_point_total) = [int(x) for x in line_els]
+            if len(line_els) == 11:
+                (total_reads_processed,total_multialignments_skipped,total_secondary_multialignments_used,total_r1_processed,discarded_reads_unaligned,discarded_reads_duplicates,discarded_reads_not_supported_by_R2,discarded_reads_poor_alignment,final_total_count,found_cut_point_total,final_cut_point_total) = [int(x) for x in line_els]
                 discarded_read_counts = [('Unaligned',discarded_reads_unaligned),('Duplicate read',discarded_reads_duplicates),('Not supported by R2',discarded_reads_not_supported_by_R2),('Poor alignment',discarded_reads_poor_alignment)]
                 classification_categories = fin.readline().rstrip('\n').split("\t")
                 classification_category_counts_str_els = fin.readline().rstrip('\n').split("\t")
@@ -2301,19 +2312,76 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
     if write_discarded_read_info:
         fout_discarded = open(discarded_read_file,'w')
 
+    if not os.path.exists(genome_mapped_bam):
+        raise Exception('Cannot find bam file at ' + genome_mapped_bam)
+
+    multimap_alignment_assignments = {} # dict of read_id -> (chr,pos) for alignment that is closest to priority cut sites (if possible) or else the primary alignment
+    if analyze_multimap_assignments:
+        logger.info('Analyzing multimapping assignments')
+
+        priority_cut_sites = []
+        for cut_site in cut_sites:
+            if 'Programmed' in cut_annotations[cut_site][0] or 'Origin' in cut_annotations[cut_site][1]:
+                priority_cut_sites.append(cut_site.split(":"))
+
+        for line in read_command_output('%s view %s'%(samtools_command,genome_mapped_bam)):
+            if line.strip() == "": break
+
+            line_els = line.split("\t") 
+            this_aln_chr = line_els[2]
+            this_aln_pos = int(line_els[3])
+            this_aln_is_secondary = int(line_els[1]) & 0x100
+
+            #first, check distance to nearest priority cut site
+            best_priority_cut_site = None
+            best_priority_cut_site_distance = float('inf')
+            for priority_cut_site in priority_cut_sites:
+                if priority_cut_site[0] == this_aln_chr:
+                    this_priority_cut_site_distance = abs(int(priority_cut_site[1]) - this_aln_pos)
+                    if this_priority_cut_site_distance < best_priority_cut_site_distance:
+                        best_priority_cut_site_distance = this_priority_cut_site_distance
+                        best_priority_cut_site = priority_cut_site
+
+            # if read hasn't been seen before, just put it into multimap_alignment_assignments
+            if line_els[0] not in multimap_alignment_assignments:
+                multimap_alignment_assignments[line_els[0]] = (this_aln_chr, this_aln_pos, best_priority_cut_site_distance, this_aln_is_secondary)
+            else: 
+                other_aln_chr, other_aln_pos, other_align_distance, other_is_secondary = multimap_alignment_assignments[line_els[0]]
+                if best_priority_cut_site is not None:
+                    #if this alignment is closer to a priority cut site than the other alignment, replace it
+                    if other_align_distance == -1: # other alignment is not a priority cut site
+                        multimap_alignment_assignments[line_els[0]] = (this_aln_chr, this_aln_pos, best_priority_cut_site_distance, this_aln_is_secondary)
+                    elif best_priority_cut_site_distance < other_align_distance: # this alignment is closer to a priority cut site than the other alignment
+                        multimap_alignment_assignments[line_els[0]] = (this_aln_chr, this_aln_pos, best_priority_cut_site_distance, this_aln_is_secondary)
+                elif other_align_distance == -1 and not this_aln_is_secondary: # other alignment is not a priority cut site, this is not a priority site, and this is the primary alignment
+                    multimap_alignment_assignments[line_els[0]] = (this_aln_chr, this_aln_pos, -1, this_aln_is_secondary)
+
     #counts for 'support' status
     r1_r2_support_status_counts = defaultdict(int)
     final_file_tmp = root + '.final_assignments.tmp'
     final_file_tmp_dedup = root + '.final_assignments.dedup.tmp'  # additional temp file for deduplicating reads by assignment to final cut positions
+    total_secondary_multialignments_used = 0 # count of secondary alignments that were assigned to priority cut sites (not including primary alignments assigned to priority cut sites)
+    total_multialignments_skipped = 0 # count of multialignments that were skipped because they were not the primary alignment or not the closest to a priority cut site
     with open(final_file_tmp,'w') as af1:
         af1.write("\t".join([str(x) for x in ['read_id','aln_pos','cut_pos','cut_direction','del_primer','ins_target','insert_size','r1_r2_support_status','r1_r2_support_dist','r1_r2_orientation_str','umi_pos_dedup_key']])+"\n")
 
-        if not os.path.exists(genome_mapped_bam):
-            raise Exception('Cannot find bam file at ' + genome_mapped_bam)
         for line in read_command_output('%s view %s'%(samtools_command,genome_mapped_bam)):
             if line.strip() == "": break
 
             line_els = line.split("\t")
+
+            if analyze_multimap_assignments and line_els[0] in multimap_alignment_assignments:
+                this_aln_chr = line_els[2]
+                this_aln_pos = int(line_els[3])
+                this_aln_is_secondary = int(line_els[1]) & 0x100
+
+                if multimap_alignment_assignments[line_els[0]][0] != this_aln_chr or \
+                        multimap_alignment_assignments[line_els[0]][1] != this_aln_pos:
+                    total_multialignments_skipped += 1
+                    if not this_aln_is_secondary: #if this is a primary alignment, but we're skipping it in favor of an alignment closer to a priority site 
+                        total_secondary_multialignments_used += 1
+                    continue # this alignment is not the one that is closest to a priority cut site, so skip it
+
 
             total_reads_processed += 1
             read_has_multiple_segments = int(line_els[1]) & 0x1
@@ -3742,9 +3810,10 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
         discarded_reads_plot_obj.datas.append(('Discarded reads',discarded_read_file))
 
     with open(info_file,'w') as fout:
-        fout.write("\t".join(['total_reads_processed', 'total_r1_processed', 'discarded_reads_unaligned', 'discarded_reads_duplicates',
+        fout.write("\t".join(['total_reads_processed', 'total_multialignments_skipped', 'total_secondary_multialignments_used', 'total_r1_processed', 
+                              'discarded_reads_unaligned', 'discarded_reads_duplicates',
                    'discarded_reads_not_supported_by_R2', 'discarded_reads_poor_alignment', 'final_read_count', 'discovered_cut_point_count', 'final_cut_point_count'])+"\n")
-        fout.write("\t".join(str(x) for x in [total_reads_processed, total_r1_processed, discarded_reads_unaligned, discarded_reads_duplicates,
+        fout.write("\t".join(str(x) for x in [total_reads_processed, total_multialignments_skipped, total_secondary_multialignments_used, total_r1_processed, discarded_reads_unaligned, discarded_reads_duplicates,
                    discarded_reads_not_supported_by_R2, discarded_reads_poor_alignment, final_total_count, found_cut_point_total, final_cut_point_total])+"\n")
         fout.write(classification_read_counts_str)
         fout.write(classification_indel_read_counts_str)

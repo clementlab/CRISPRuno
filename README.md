@@ -42,16 +42,36 @@ Run CRISPRuno with the command `python CRISPRuno.py settings.txt`. View the exam
                         is produced (default: False)
   --suppress_plots      If true, no plotting will be performed (default:
                         False)
-  --guide_sequences [GUIDE_SEQUENCES ...]
+  --guide_sequences GUIDE_SEQUENCES [GUIDE_SEQUENCES ...]
                         Spacer sequences of guides (multiple guide sequences
                         are separated by spaces). Spacer sequences must be
                         provided without the PAM sequence, but oriented so the
                         PAM would immediately follow the provided spacer
                         sequence (default: [])
-  --cut_classification_annotations [CUT_CLASSIFICATION_ANNOTATIONS ...]
+  --cut_classification_annotations CUT_CLASSIFICATION_ANNOTATIONS [CUT_CLASSIFICATION_ANNOTATIONS ...]
                         User-customizable annotations for cut products in the
                         form: chr1:234:left:Custom_label (multiple annotations
                         are separated by spaces) (default: [])
+  --cut_region_annotation_file CUT_REGION_ANNOTATION_FILE
+                        Bed file containing regions to annotate cut sites that
+                        are not otherwise annotated (e.g. fragile sites,
+                        etc.). This is a tab-separated file with at least 4
+                        columns: chr, start, end, and region_name. Cut sites
+                        will be labeled with the following priority: 1)
+                        annotation given by --cut_classification_annotations,
+                        2) annotations in --additional_cut_site_file 3)
+                        presence of homology to any guide 4) this region
+                        annotation (default: None)
+  --additional_cut_site_file ADDITIONAL_CUT_SITE_FILE
+                        File containing additional cut site annotations. This
+                        file should have five tab-separated columns. 1)
+                        chromosome of the cut site 2) position of the cut site
+                        3) guide alignment orientation with respect to the
+                        genome (either "FW" or "RC") 4) guide sequence not
+                        including the PAM (this will be used to search for
+                        homology and may be left blank) 5) cut annotation
+                        (e.g. "Programmed" - this will appear in reports)
+                        (default: None)
   --cleavage_offset CLEAVAGE_OFFSET
                         Position where cleavage occurs, for in-silico off-
                         target search (relative to end of spacer seq -- for
@@ -116,11 +136,15 @@ Run CRISPRuno with the command `python CRISPRuno.py settings.txt`. View the exam
   --primer_seq PRIMER_SEQ
                         Sequence of primer (default: None)
   --primer_in_r2        If true, the primer is in R2. By default, the primer
-                        is required to be present in R1.
-                        (default: False)
+                        is required to be in R1. (default: False)
   --min_primer_aln_score MIN_PRIMER_ALN_SCORE
                         Minimum primer/origin alignment score for trimming.
                         (default: 40)
+  --allow_indels_in_origin_aln
+                        If set, indels in the primer/origin alignment are
+                        allowed. By default, indels are not allowed and if an
+                        indel is observed in the primer/origin the read will
+                        be discarded. (default: False)
   --min_primer_length MIN_PRIMER_LENGTH
                         Minimum length of sequence required to match between
                         the primer/origin and read sequence (default: 30)
@@ -134,6 +158,9 @@ Run CRISPRuno with the command `python CRISPRuno.py settings.txt`. View the exam
 
 #### Alignment cutoff parameters:
 ```
+  --min_alignment_quality_score MIN_ALIGNMENT_QUALITY_SCORE
+                        minimum alignment quality score to accept alignment
+                        (default: 30)
   --arm_min_matched_start_bases ARM_MIN_MATCHED_START_BASES
                         Number of bases that are required to be matching (no
                         indels or mismatches) at the beginning of the read on
@@ -162,10 +189,10 @@ Run CRISPRuno with the command `python CRISPRuno.py settings.txt`. View the exam
                         (default: False)
   --suppress_poor_alignment_filter
                         If set, reads with poor alignment (fewer than
-                        --arm_min_matched_start_bases matches at the
-                        alignment ends or more than --arm_max_clipped_bases on
-                        both sides of the read) are included in final
-                        analysis and counts (default: False)
+                        --arm_min_matched_start_bases matches at the alignment
+                        ends or more than --arm_max_clipped_bases on both
+                        sides of the read) are included in final analysis and
+                        counts. By default they are excluded. (default: False)
 ```
 #### CRISPResso settings:
 ```
@@ -206,6 +233,15 @@ Run CRISPRuno with the command `python CRISPRuno.py settings.txt`. View the exam
   --n_processes N_PROCESSES
                         Number of processes to run on (may be set to "max")
                         (default: 1)
+```
+#### Alignment parameters:
+```
+  --analyze_multimap_assignments
+                        If set, reads that map to multiple locations will be
+                        analyzed and assigned to locations near known cut
+                        sites. If not set, only the primary alignment (as
+                        specified by the aligner) will be used (default:
+                        False)
 ```
 #### UMI parameters:
 ```
@@ -253,6 +289,8 @@ Run CRISPRuno with the command `python CRISPRuno.py settings.txt`. View the exam
                         If set, reads without r2 support will be included
                         in final analysis and counts. By default these reads 
                         are excluded (default: False)
-
-
 ```
+
+# Long-read mode
+For long reads which may have more indels, indels may prevent reads from aligning to origin sequence. To allow more flexibility, run with the parameters:
+`--allow_indels_in_origin_aln --min_primer_aln_score 10 --min_alignment_quality_score 10`
