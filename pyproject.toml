@@ -1,0 +1,39 @@
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "CRISPRuno"
+version = "0.1.19"
+description = "CRISPRuno enables analysis of single-anchor amplicon sequencing to quantify complex genome editing outcomes."
+authors = [
+    { name = "Kendell Clement", email = "k.clement.dev@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "pandas",
+    "biopython",
+    "matplotlib",
+    "seaborn",
+    "jinja2",
+    "scipy",
+    "numpy",
+    "cutadapt"
+]
+
+[project.urls]
+Homepage = "https://github.com/kclem/crispruno"
+
+[project.scripts]
+CRISPRuno = "CRISPRuno.cli:crispruno"
+CRISPRunoBatch = "CRISPRuno.cli:batch"
+CRISPRunoCompare = "CRISPRuno.cli:compare"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["CRISPRuno"]
+
+[tool.setuptools.package-data]
+"CRISPRuno" = ["lib/*"]

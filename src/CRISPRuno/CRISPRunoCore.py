@@ -2,6 +2,7 @@ import argparse
 from collections import defaultdict
 import ctypes
 import gzip
+import importlib.metadata
 import json
 import logging
 import matplotlib
@@ -25,7 +26,10 @@ from CRISPResso2 import CRISPResso2Align
 import matplotlib as mpl
 mpl.rcParams['pdf.fonttype'] = 42
 
-__version__ = "v0.1.19"
+def read_version():
+    return importlib.metadata.version('CRISPRuno')
+
+__version__ = read_version()
 
 
 def processCRISPRuno(settings):
