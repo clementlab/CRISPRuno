@@ -2257,8 +2257,8 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                         head_line = fin.readline().rstrip('\n')
                         head_line_els = head_line.split("\t")
                         read_total_read_count = 0
-                        final_cut_ind = 12
-                        final_cut_indel_ind = 13
+                        final_cut_ind = 16
+                        final_cut_indel_ind = 17
                         if head_line_els[final_cut_ind] == "final_cut_pos" and head_line_els[final_cut_indel_ind] == 'final_cut_indel':
                             logger.info('Reading previously-processed assignments')
                             #if header matches, read file
@@ -2360,14 +2360,16 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                 elif other_align_distance == -1 and not this_aln_is_secondary: # other alignment is not a priority cut site, this is not a priority site, and this is the primary alignment
                     multimap_alignment_assignments[line_els[0]] = (this_aln_chr, this_aln_pos, -1, this_aln_is_secondary)
 
-    #counts for 'support' status
-    r1_r2_support_status_counts = defaultdict(int)
+    r2_mate_info = {} # dict of read_id -> (mapping_quality,mismatches) for r2 reads
+    r1_r2_support_status_counts = defaultdict(int) # counts for 'support' status
     final_file_tmp = root + '.final_assignments.tmp'
     final_file_tmp_dedup = root + '.final_assignments.dedup.tmp'  # additional temp file for deduplicating reads by assignment to final cut positions
     total_secondary_multialignments_used = 0 # count of secondary alignments that were assigned to priority cut sites (not including primary alignments assigned to priority cut sites)
     total_multialignments_skipped = 0 # count of multialignments that were skipped because they were not the primary alignment or not the closest to a priority cut site
     with open(final_file_tmp,'w') as af1:
-        af1.write("\t".join([str(x) for x in ['read_id','aln_pos','cut_pos','cut_direction','del_primer','ins_target','insert_size','r1_r2_support_status','r1_r2_support_dist','r1_r2_orientation_str','umi_pos_dedup_key']])+"\n")
+        af1.write("\t".join([str(x) for x in ['read_id','aln_pos','cut_pos','cut_direction','del_primer','ins_target','insert_size',
+                                              'r1_r2_support_status','r1_r2_support_dist','r1_r2_orientation_str',
+                                              'r1_alignment_quality','r1_alignment_mismatches','umi_pos_dedup_key']])+"\n")
 
         for line in read_command_output('%s view %s'%(samtools_command,genome_mapped_bam)):
             if line.strip() == "": break
@@ -2391,8 +2393,17 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
             read_has_multiple_segments = int(line_els[1]) & 0x1
             read_is_paired_read_1 = int(line_els[1]) & 0x40 # only set with bowtie if read is from paired reads
 
-            if read_has_multiple_segments and not read_is_paired_read_1:
+            if read_has_multiple_segments and not read_is_paired_read_1: #if this is read 2 extract alignment info and continue
+                r2_read_alignment_quality = int(line_els[4])
+                for line_el in line_els:
+                    r2_num_mismatches = None
+                    if line_el.startswith('NM:i'): #NM:i:<N> The edit distance; that is, the minimal number of one-nucleotide edits (substitutions, insertions and deletions) needed to transform the read string into the reference string. Only present if SAM record is for an aligned read.
+                        r2_num_mismatches = int(line_el[5:])
+                        break
+                read_id = line_els[0].split(" ")[0]
+                r2_mate_info[line_els[0]] = (r2_read_alignment_quality, r2_num_mismatches) #store mapping quality and number of mismatches for r2 read
                 continue
+
             total_r1_processed += 1
 
             read_is_not_primary_alignment = int(line_els[4]) & 0x100
@@ -2428,6 +2439,13 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                     left_matches,right_matches = getLeftRightMismatchesMDZ(mez_val)
                     break
 
+            r1_aln_quality = int(line_els[4])
+            r1_aln_mismatches = None
+            for line_el in line_els:
+                if line_el.startswith('NM:i'): #NM:i:<N> The edit distance; that is, the minimal number of one-nucleotide edits (substitutions, insertions and deletions) needed to transform the read string into the reference string. Only present if SAM record is for an aligned read.
+                    r1_aln_mismatches = int(line_el[5:])
+                    break
+
             cigar_str = line_els[5]
             start_clipped = 0
             m = re.search(r"^(\d+)S\d",cigar_str)
@@ -2452,7 +2470,6 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                 continue
 
             line_chr = line_els[2]
-            line_mapq = line_els[5]
             line_start = int(line_els[3])
             seq_len = len(seq) - (start_clipped + end_clipped)
             line_end = line_start+(seq_len-1)
@@ -2562,7 +2579,8 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
             aln_pos_by_chr[line_chr][aln_pos_window] += 1
 
             af1.write("\t".join([str(x) for x in [line_info, aln_pos, cut_pos, cut_direction, del_primer,
-                      ins_target, insert_size, r1_r2_support_status, r1_r2_support_dist, r1_r2_orientation_str, umi_dedup_key]]) + "\n")
+                      ins_target, insert_size, r1_r2_support_status, r1_r2_support_dist, r1_r2_orientation_str, 
+                      r1_aln_quality, r1_aln_mismatches, umi_dedup_key]]) + "\n")
 
         #done iterating through bam file
     #close assignments file
@@ -2847,7 +2865,9 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
     r1_r2_support_status_ind = 7
     r1_r2_support_dist_ind = 8
     r1_r2_orientation_str_ind = 9
-    umi_dedup_key_ind = 10
+    r1_aln_quality_ind = 10
+    r1_aln_mismatch_ind = 11
+    umi_dedup_key_ind = 12
 
     # if experiment_had_UMIs, perform deduplication based on final cut point assignment instead of alignment position
     #   if dedup_by_final_cut_assignment_and_UMI is set:
@@ -2905,7 +2925,31 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
     dedup_umi_counts_per_classification = defaultdict(int) #  count of umi per final classification. 
     with open(final_file_tmp,'r') as fin, open(final_file,'w') as fout:
         old_head = fin.readline().strip()
-        fout.write(old_head + "\t" + "\t".join([str(x) for x in ['reads_with_same_umi_pos','final_cut_pos','final_cut_indel','indel_classification','classification']]) +"\n")
+        old_head_els = old_head.split("\t")
+        head_to_print = "\t".join([str(x) for x in [
+                                old_head_els[read_id_ind],
+                                old_head_els[aln_ind],
+                                old_head_els[cut_pos_ind],
+                                old_head_els[cut_direction_ind],
+                                old_head_els[del_primer_ind],
+                                old_head_els[ins_target_ind],
+                                old_head_els[insert_size_ind],
+                                old_head_els[r1_r2_support_status_ind],
+                                old_head_els[r1_r2_support_dist_ind],
+                                old_head_els[r1_r2_orientation_str_ind],
+                                old_head_els[r1_aln_quality_ind],
+                                old_head_els[r1_aln_mismatch_ind],
+                                'r2 alignment quality',
+                                'r2_alignment_mismatches',
+                                old_head_els[umi_dedup_key_ind],
+                                'reads_with_same_umi_pos',
+                                'final_cut_pos',
+                                'final_cut_indel',
+                                'indel_classification',
+                                'classification'
+                            ]])
+        fout.write(head_to_print + "\n")
+
         for line in fin:
             line = line.rstrip('\n')
             final_total_count += 1
@@ -2957,8 +3001,36 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                 dedup_umi_read_sum_per_classification[final_classification+' '+indel_str] += 1
             dedup_umi_counts_per_classification[final_classification+' '+indel_str] += 1
 
-            fout.write(line + "\t" + "\t".join([str(x) for x in [num_barcodes_seen_umi_pos,final_cut_point_and_direction,final_cut_indel,indel_str,final_classification]]) +"\n")
-#            fout.write(line + "\t" + "\t".join([str(x) for x in [final_cut_point_and_direction,'it:'+str(ins_target)+';dp:'+str(del_primer)+';ai:'+str(aln_indel)+';fci:'+str(final_cut_indel),final_classification]]) +"\n")
+            r2_aln_quality = None
+            r2_aln_mismatches = None
+            read_id = line_id.split(" ")[0]
+            if read_id in r2_mate_info:
+                (r2_aln_quality, r2_aln_mismatches) = r2_mate_info[read_id]
+
+            line_to_print = "\t".join([str(x) for x in [
+                                    line_els[read_id_ind],
+                                    line_els[aln_ind],
+                                    line_els[cut_pos_ind],
+                                    line_els[cut_direction_ind],
+                                    line_els[del_primer_ind],
+                                    line_els[ins_target_ind],
+                                    line_els[insert_size_ind],
+                                    line_els[r1_r2_support_status_ind],
+                                    line_els[r1_r2_support_dist_ind],
+                                    line_els[r1_r2_orientation_str_ind],
+                                    line_els[r1_aln_quality_ind],
+                                    line_els[r1_aln_mismatch_ind],
+                                    r2_aln_quality,
+                                    r2_aln_mismatches,
+                                    line_els[umi_dedup_key_ind],
+                                    num_barcodes_seen_umi_pos,
+                                    final_cut_point_and_direction,
+                                    final_cut_indel,
+                                    indel_str,
+                                    final_classification
+                                ]])
+
+            fout.write(line_to_print + "\n")
 
             if final_cut_point_chr == origin_chr:
                 if final_cut_point_start == origin_cut_pos:
@@ -4658,7 +4730,7 @@ def run_and_aggregate_crispresso(root,crispresso_infos,final_assignment_file,n_p
     with open(final_assignment_file,'r') as f_assignments, open(annotated_final_assignments_file,'w') as fout:
         head = f_assignments.readline().rstrip('\n')
         head_line_els = head.split("\t")
-        final_classification_ind = 15
+        final_classification_ind = 19
         if head_line_els[final_classification_ind] != "classification":
             raise Exception("Couldn't parse final assignment file " + final_assignment_file)
         fout.write(head+"\tcrispresso_status\n")
