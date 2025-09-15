@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "CRISPRuno"
-version = "0.1.19"
+version = "0.1.20"
 description = "CRISPRuno enables analysis of single-anchor amplicon sequencing to quantify complex genome editing outcomes."
 authors = [
     { name = "Kendell Clement", email = "k.clement.dev@gmail.com" }

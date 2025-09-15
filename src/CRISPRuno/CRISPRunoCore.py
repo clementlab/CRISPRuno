@@ -119,7 +119,7 @@ def processCRISPRuno(settings):
                     min_umi_seen_to_keep_read=settings['min_umi_seen_to_keep_read'],
                     write_UMI_counts=settings['write_UMI_counts'],
                     can_use_previous_analysis=settings['can_use_previous_analysis']
-        )
+                    )
     if not experiment_had_UMIs:
         post_UMI_regex_count = num_reads_input
         post_initial_dedup_count = num_reads_input
@@ -127,22 +127,23 @@ def processCRISPRuno(settings):
         curr_r1_file = analyze_UMI_r1
         curr_r2_file = analyze_UMI_r2
 
-    filtered_on_primer_fastq_r1, filtered_on_primer_fastq_r2, post_filter_on_primer_read_count, filter_on_primer_plot_obj = filter_on_primer(
-            root=settings['root']+'.trimPrimers',
-            fastq_r1=curr_r1_file,
-            fastq_r2=curr_r2_file,
-            origin_seq=origin_seq,
-            min_primer_aln_score=settings['min_primer_aln_score'],
-            allow_indels_in_origin_aln=settings['allow_indels_in_origin_aln'],
-            min_primer_length=settings['min_primer_length'],
-            min_read_length=settings['min_read_length'],
-            transposase_adapter_seq=settings['transposase_adapter_seq'],
-            n_processes=settings['n_processes'],
-            cutadapt_command=settings['cutadapt_command'],
-            keep_intermediate=settings['keep_intermediate'],
-            suppress_plots=settings['suppress_plots'],
-            can_use_previous_analysis=settings['can_use_previous_analysis'],
-            )
+    (filtered_on_primer_fastq_r1, filtered_on_primer_fastq_r2, post_filter_on_primer_read_count, filter_on_primer_plot_obj
+            ) = filter_on_primer(
+                    root=settings['root']+'.trimPrimers',
+                    fastq_r1=curr_r1_file,
+                    fastq_r2=curr_r2_file,
+                    origin_seq=origin_seq,
+                    min_primer_aln_score=settings['min_primer_aln_score'],
+                    allow_indels_in_origin_aln=settings['allow_indels_in_origin_aln'],
+                    min_primer_length=settings['min_primer_length'],
+                    min_read_length=settings['min_read_length'],
+                    transposase_adapter_seq=settings['transposase_adapter_seq'],
+                    n_processes=settings['n_processes'],
+                    cutadapt_command=settings['cutadapt_command'],
+                    keep_intermediate=settings['keep_intermediate'],
+                    suppress_plots=settings['suppress_plots'],
+                    can_use_previous_analysis=settings['can_use_previous_analysis'],
+                    )
 
     if filter_on_primer_plot_obj is not None:
         filter_on_primer_plot_obj.order = 3
@@ -151,17 +152,17 @@ def processCRISPRuno(settings):
     # perform alignment
     (genome_mapped_bam
             ) = align_reads(
-                root=settings['root']+'.genomeAlignment',
-                fastq_r1=filtered_on_primer_fastq_r1,
-                fastq_r2=filtered_on_primer_fastq_r2,
-                bowtie2_reference=settings['bowtie2_genome'],
-                bowtie2_command=settings['bowtie2_command'],
-                bowtie2_threads=settings['n_processes'],
-                analyze_multimap_assignments=settings['analyze_multimap_assignments'],
-                samtools_command=settings['samtools_command'],
-                keep_intermediate=settings['keep_intermediate'],
-                can_use_previous_analysis=settings['can_use_previous_analysis']
-                )
+                    root=settings['root']+'.genomeAlignment',
+                    fastq_r1=filtered_on_primer_fastq_r1,
+                    fastq_r2=filtered_on_primer_fastq_r2,
+                    bowtie2_reference=settings['bowtie2_genome'],
+                    bowtie2_command=settings['bowtie2_command'],
+                    bowtie2_threads=settings['n_processes'],
+                    analyze_multimap_assignments=settings['analyze_multimap_assignments'],
+                    samtools_command=settings['samtools_command'],
+                    keep_intermediate=settings['keep_intermediate'],
+                    can_use_previous_analysis=settings['can_use_previous_analysis']
+                    )
 
     if not settings['keep_intermediate']:
         for file_to_delete in [umi_fastq_r1,umi_fastq_r2,analyze_UMI_r1,analyze_UMI_r2,filtered_on_primer_fastq_r1,filtered_on_primer_fastq_r2]:
@@ -174,40 +175,42 @@ def processCRISPRuno(settings):
     (final_assignment_file, final_read_ids_for_crispresso, final_cut_counts, cut_classification_lookup, final_read_count, discarded_read_counts, classification_read_counts, classification_indel_read_counts,
         chr_aln_plot_obj, tlen_plot_obj, deduplication_plot_obj, tx_order_plot_obj, tx_count_plot_obj, tx_circos_plot_obj, classification_plot_obj, classification_indel_plot_obj,
         origin_indel_hist_plot_obj, origin_inversion_deletion_hist_plot_obj, origin_indel_depth_plot_obj,
-        r1_r2_support_plot_obj, r1_r2_support_dist_plot_obj, discarded_reads_plot_obj) = make_final_read_assignments(
-                root=settings['root']+'.final',
-                genome_mapped_bam=genome_mapped_bam,
-                origin_seq=origin_seq,
-                cut_sites=cut_sites,
-                cut_annotations=cut_annotations,
-                cut_classification_annotations=settings['cut_classification_annotations'],
-                cut_region_annotation_file = settings['cut_region_annotation_file'],
-                guide_seqs=settings['guide_sequences'],
-                cleavage_offset=settings['cleavage_offset'],
-                min_primer_length=settings['min_primer_length'],
-                genome=settings['genome'],
-                experiment_had_UMIs=experiment_had_UMIs,
-                r1_r2_support_max_distance=settings['r1_r2_support_max_distance'],
-                novel_cut_merge_distance=settings['novel_cut_merge_distance'],
-                known_cut_merge_distance=settings['known_cut_merge_distance'],
-                origin_cut_merge_distance=settings['origin_cut_merge_distance'],
-                arm_min_matched_start_bases=settings['arm_min_matched_start_bases'],
-                arm_max_clipped_bases=settings['arm_max_clipped_bases'],
-                genome_map_resolution=1000000,
-                crispresso_max_indel_size=settings['crispresso_max_indel_size'],
-                suppress_dedup_on_aln_pos_and_UMI_filter=settings['suppress_dedup_on_aln_pos_and_UMI_filter'],
-                dedup_by_final_cut_assignment_and_UMI=settings['dedup_by_final_cut_assignment_and_UMI'],
-                suppress_r2_support_filter=settings['suppress_r2_support_filter'],
-                min_alignment_quality_score=settings['min_alignment_quality_score'],
-                suppress_poor_alignment_filter=settings['suppress_poor_alignment_filter'],
-                analyze_multimap_assignments=settings['analyze_multimap_assignments'],
-                write_discarded_read_info=settings['write_discarded_read_info'],
-                samtools_command=settings['samtools_command'],
-                keep_intermediate=settings['keep_intermediate'],
-                suppress_homology_detection=settings['suppress_homology_detection'],
-                suppress_plots=settings['suppress_plots'],
-                can_use_previous_analysis=settings['can_use_previous_analysis']
-                )
+        r1_r2_support_plot_obj, r1_r2_support_dist_plot_obj, discarded_reads_plot_obj
+            ) = make_final_read_assignments(
+                    root=settings['root']+'.final',
+                    genome_mapped_bam=genome_mapped_bam,
+                    origin_seq=origin_seq,
+                    cut_sites=cut_sites,
+                    cut_annotations=cut_annotations,
+                    cut_classification_annotations=settings['cut_classification_annotations'],
+                    cut_region_annotation_file = settings['cut_region_annotation_file'],
+                    guide_seqs=settings['guide_sequences'],
+                    cleavage_offset=settings['cleavage_offset'],
+                    min_primer_length=settings['min_primer_length'],
+                    genome=settings['genome'],
+                    experiment_had_UMIs=experiment_had_UMIs,
+                    r1_r2_support_max_distance=settings['r1_r2_support_max_distance'],
+                    novel_cut_merge_distance=settings['novel_cut_merge_distance'],
+                    known_cut_merge_distance=settings['known_cut_merge_distance'],
+                    origin_cut_merge_distance=settings['origin_cut_merge_distance'],
+                    arm_min_matched_start_bases=settings['arm_min_matched_start_bases'],
+                    arm_max_clipped_bases=settings['arm_max_clipped_bases'],
+                    genome_map_resolution=1000000,
+                    crispresso_max_indel_size=settings['crispresso_max_indel_size'],
+                    suppress_dedup_on_aln_pos_and_UMI_filter=settings['suppress_dedup_on_aln_pos_and_UMI_filter'],
+                    dedup_by_final_cut_assignment_and_UMI=settings['dedup_by_final_cut_assignment_and_UMI'],
+                    suppress_r2_support_filter=settings['suppress_r2_support_filter'],
+                    min_alignment_quality_score=settings['min_alignment_quality_score'],
+                    min_r2_alignment_quality_score=settings['min_r2_alignment_quality_score'],
+                    suppress_poor_alignment_filter=settings['suppress_poor_alignment_filter'],
+                    analyze_multimap_assignments=settings['analyze_multimap_assignments'],
+                    write_discarded_read_info=settings['write_discarded_read_info'],
+                    samtools_command=settings['samtools_command'],
+                    keep_intermediate=settings['keep_intermediate'],
+                    suppress_homology_detection=settings['suppress_homology_detection'],
+                    suppress_plots=settings['suppress_plots'],
+                    can_use_previous_analysis=settings['can_use_previous_analysis']
+                    )
 
     if chr_aln_plot_obj is not None:
         chr_aln_plot_obj.order = 20
@@ -300,17 +303,17 @@ def processCRISPRuno(settings):
         summary_plot_objects.append(crispresso_classification_plot_obj)
 
     final_summary_file, final_summary_plot_obj = make_final_summary(
-            root=settings['root']+'.summary',
-            num_reads_input=num_reads_input,
-            post_UMI_regex_count=post_UMI_regex_count,
-            post_initial_dedup_count=post_initial_dedup_count,
-            post_filter_on_primer_read_count=post_filter_on_primer_read_count,
-            final_read_count=final_read_count,
-            discarded_read_counts=discarded_read_counts,
-            classification_read_counts=classification_read_counts,
-            classification_indel_read_counts=classification_indel_read_counts,
-            suppress_plots=settings['suppress_plots']
-            )
+                root=settings['root']+'.summary',
+                num_reads_input=num_reads_input,
+                post_UMI_regex_count=post_UMI_regex_count,
+                post_initial_dedup_count=post_initial_dedup_count,
+                post_filter_on_primer_read_count=post_filter_on_primer_read_count,
+                final_read_count=final_read_count,
+                discarded_read_counts=discarded_read_counts,
+                classification_read_counts=classification_read_counts,
+                classification_indel_read_counts=classification_indel_read_counts,
+                suppress_plots=settings['suppress_plots']
+                )
 
     if not settings['keep_intermediate']:
         if curr_r1_file is not None and os.path.exists(curr_r1_file):
@@ -433,6 +436,7 @@ def parse_settings(args):
     #R1/R2 support settings
     r_group = parser.add_argument_group('R1/R2 support settings')
     r_group.add_argument('--r1_r2_support_max_distance', type=int, help='Max distance between r1 and r2 for the read pair to be classified as "supported" by r2', default=10000)
+    r_group.add_argument('--min_r2_alignment_quality_score', type=int, help='Minimum alignment quality score for r2 for the read pair to be classified as "supported" by r2', default=30)
     r_group.add_argument('--suppress_r2_support_filter', help='If set, reads without r2 support will be included in final analysis and counts. By default these reads are excluded.', action='store_true')
 
 
@@ -500,6 +504,8 @@ def parse_settings(args):
 
 
     logger.info('CRISPRuno ' + __version__)
+
+    logger.debug('Command line arguments: ' + ' '.join(args))
 
     logger.info('Parsing settings file')
 
@@ -649,6 +655,11 @@ def parse_settings(args):
     if 'min_alignment_quality_score' in settings_file_args:
         settings['min_alignment_quality_score'] = int(settings_file_args['min_alignment_quality_score'])
         settings_file_args.pop('min_alignment_quality_score')
+
+    settings['min_r2_alignment_quality_score'] = cmd_args.min_r2_alignment_quality_score
+    if 'min_r2_alignment_quality_score' in settings_file_args:
+        settings['min_r2_alignment_quality_score'] = int(settings_file_args['min_r2_alignment_quality_score'])
+        settings_file_args.pop('min_r2_alignment_quality_score')
 
     settings['arm_min_matched_start_bases'] = cmd_args.arm_min_matched_start_bases
     if 'arm_min_matched_start_bases' in settings_file_args:
@@ -2083,7 +2094,7 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
     cut_sites,cut_annotations,cut_classification_annotations,cut_region_annotation_file,guide_seqs,cleavage_offset,min_primer_length,genome,r1_r2_support_max_distance=100000,
     novel_cut_merge_distance=50,known_cut_merge_distance=50,origin_cut_merge_distance=10000,short_indel_length_cutoff=50,guide_homology_max_gaps=2,guide_homology_max_mismatches=5,
     arm_min_matched_start_bases=10,arm_max_clipped_bases=0,genome_map_resolution=1000000,crispresso_max_indel_size=50,suppress_dedup_on_aln_pos_and_UMI_filter=False,
-    dedup_by_final_cut_assignment_and_UMI=True,suppress_r2_support_filter=False,min_alignment_quality_score=30,suppress_poor_alignment_filter=False,analyze_multimap_assignments=False,write_discarded_read_info=False,experiment_had_UMIs=False,
+    dedup_by_final_cut_assignment_and_UMI=True,suppress_r2_support_filter=False,min_alignment_quality_score=30,min_r2_alignment_quality_score=30,suppress_poor_alignment_filter=False,analyze_multimap_assignments=False,write_discarded_read_info=False,experiment_had_UMIs=False,
     samtools_command='samtools',keep_intermediate=False,suppress_homology_detection=False,suppress_plots=False,can_use_previous_analysis=False):
     """
     Makes final read assignments
@@ -2117,6 +2128,7 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
         dedup_by_final_cut_assignment_and_UMI: if true, deduplicates based on final cut assignment - so that reads with the same UMI with different start/stop alignment positions will be deduplicated if they are assigned to the same final cut position
         suppress_r2_support_filter: if true, reads without r2 support will be included in final analysis and counts. If false, reads without r2 support will be filtered from the final analysis.
         min_alignment_quality_score: minimum alignment quality score for a read to be included in the final analysis
+        min_r2_alignment_quality_score: minimum alignment quality score for a read to be classified as 'supported' by r2
         suppress_poor_alignment_filter: if true, reads with poor alignment (fewer than --arm_min_matched_start_bases matches at the alignment ends or more than --arm_max_clipped_bases on both sides of the read) are included in the final analysis and counts. If false, reads with poor alignment are filtered from the final analysis.
         analyze_multimap_assignments: if true, reads that map to multiple locations will be analyzed and assigned to cuts. The alignment that is nearest a Programmed or Origin cut site will be used. If false, only the first alignment will be used for assignment.
         experiment_had_UMIs (bool): True if experiment had UMIs. If false, sample is not deduplicated on UMIs
@@ -2292,6 +2304,9 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
     r1_r2_support_str_not_supported_distance = "Not supported by R2 - alignment separation more than maximum"
     r1_r2_support_str_not_supported_diff_chrs = "Not supported by R2 - different chrs"
     r1_r2_support_str_not_supported_not_aln = "Not supported by R2 - unaligned"
+    r1_r2_support_str_not_supported_low_aln_score = "Not supported by R2 - R2 alignment score too low"
+    r1_r2_support_labels = [r1_r2_support_str_supported,r1_r2_support_str_not_supported_orientation,r1_r2_support_str_not_supported_distance,
+                            r1_r2_support_str_not_supported_diff_chrs,r1_r2_support_str_not_supported_not_aln,r1_r2_support_str_not_supported_low_aln_score]
 
     #analyze alignments
     seen_reads_for_dedup = {} # put read id into this dict for deduplicating
@@ -2360,18 +2375,53 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                 elif other_align_distance == -1 and not this_aln_is_secondary: # other alignment is not a priority cut site, this is not a priority site, and this is the primary alignment
                     multimap_alignment_assignments[line_els[0]] = (this_aln_chr, this_aln_pos, -1, this_aln_is_secondary)
 
+    total_secondary_multialignments_used = 0 # count of secondary alignments that were assigned to priority cut sites (not including primary alignments assigned to priority cut sites)
+    total_multialignments_skipped = 0 # count of multialignments that were skipped because they were not the primary alignment or not the closest to a priority cut site
+
+    #read in R2 info (if any)
+    r2_reads_count = 0
     r2_mate_info = {} # dict of read_id -> (mapping_quality,mismatches) for r2 reads
+    for line in read_command_output('%s view -f 128 %s'%(samtools_command,genome_mapped_bam)): # -f 128 means only include read 2
+        if line.strip() == "": break
+        line_els = line.split("\t")
+
+        if analyze_multimap_assignments and line_els[0] in multimap_alignment_assignments:
+            this_aln_chr = line_els[2]
+            this_aln_pos = int(line_els[3])
+            this_aln_is_secondary = int(line_els[1]) & 0x100
+
+            if multimap_alignment_assignments[line_els[0]][0] != this_aln_chr or \
+                    multimap_alignment_assignments[line_els[0]][1] != this_aln_pos:
+                total_multialignments_skipped += 1
+                if not this_aln_is_secondary: #if this is a primary alignment, but we're skipping it in favor of an alignment closer to a priority site 
+                    total_secondary_multialignments_used += 1
+                continue # this alignment is not the one that is closest to a priority cut site, so skip it
+
+        r2_read_alignment_quality = int(line_els[4])
+        for line_el in line_els:
+            r2_num_mismatches = None
+            if line_el.startswith('NM:i'): #NM:i:<N> The edit distance; that is, the minimal number of one-nucleotide edits (substitutions, insertions and deletions) needed to transform the read string into the reference string. Only present if SAM record is for an aligned read.
+                r2_num_mismatches = int(line_el[5:])
+                break
+
+        r2_unmapped = int(line_els[1]) & 0x4
+
+        read_id = line_els[0].split(" ")[0]
+        r2_mate_info[read_id] = (r2_unmapped, r2_read_alignment_quality, r2_num_mismatches) #store unmapped status, mapping quality and number of mismatches for r2 read
+
+        total_reads_processed += 1
+        r2_reads_count += 1
+
     r1_r2_support_status_counts = defaultdict(int) # counts for 'support' status
     final_file_tmp = root + '.final_assignments.tmp'
     final_file_tmp_dedup = root + '.final_assignments.dedup.tmp'  # additional temp file for deduplicating reads by assignment to final cut positions
-    total_secondary_multialignments_used = 0 # count of secondary alignments that were assigned to priority cut sites (not including primary alignments assigned to priority cut sites)
-    total_multialignments_skipped = 0 # count of multialignments that were skipped because they were not the primary alignment or not the closest to a priority cut site
     with open(final_file_tmp,'w') as af1:
+        #changes to columns here should trigger an update at lines with the text AS COLUMNS ARE ADDED TO THE FINAL REPORT
         af1.write("\t".join([str(x) for x in ['read_id','aln_pos','cut_pos','cut_direction','del_primer','ins_target','insert_size',
                                               'r1_r2_support_status','r1_r2_support_dist','r1_r2_orientation_str',
-                                              'r1_alignment_quality','r1_alignment_mismatches','umi_pos_dedup_key']])+"\n")
+                                              'r1_alignment_quality','r1_alignment_mismatches','r2_alignment_quality','r2_alignment_mismatches','umi_pos_dedup_key']])+"\n")
 
-        for line in read_command_output('%s view %s'%(samtools_command,genome_mapped_bam)):
+        for line in read_command_output('%s view -F 128 %s'%(samtools_command,genome_mapped_bam)): #ignore read 2 (-F 128)
             if line.strip() == "": break
 
             line_els = line.split("\t")
@@ -2388,20 +2438,11 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                         total_secondary_multialignments_used += 1
                     continue # this alignment is not the one that is closest to a priority cut site, so skip it
 
-
             total_reads_processed += 1
             read_has_multiple_segments = int(line_els[1]) & 0x1
             read_is_paired_read_1 = int(line_els[1]) & 0x40 # only set with bowtie if read is from paired reads
 
             if read_has_multiple_segments and not read_is_paired_read_1: #if this is read 2 extract alignment info and continue
-                r2_read_alignment_quality = int(line_els[4])
-                for line_el in line_els:
-                    r2_num_mismatches = None
-                    if line_el.startswith('NM:i'): #NM:i:<N> The edit distance; that is, the minimal number of one-nucleotide edits (substitutions, insertions and deletions) needed to transform the read string into the reference string. Only present if SAM record is for an aligned read.
-                        r2_num_mismatches = int(line_el[5:])
-                        break
-                read_id = line_els[0].split(" ")[0]
-                r2_mate_info[line_els[0]] = (r2_read_alignment_quality, r2_num_mismatches) #store mapping quality and number of mismatches for r2 read
                 continue
 
             total_r1_processed += 1
@@ -2506,6 +2547,9 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
             r2_aln_chr_for_support = None
             r2_orientation_for_support = None
 
+            r2_info = r2_mate_info.get(line_els[0].split(" ")[0], (None, None, None)) # (r2_unmapped, r2_read_alignment_quality, r2_num_mismatches)
+            r2_unmapped, r2_aln_quality, r2_aln_mismatches = r2_info
+
             if read_is_paired_read_1:
                 r1_aln_chr_for_support = line_chr
                 r1_orientation_for_support = "-" if is_rc else "+"
@@ -2515,7 +2559,9 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                 mate_is_unmapped = int(line_els[1]) & 0x8
 
                 #determine R1/R2 support
-                if r1_aln_chr_for_support == "*" or r2_aln_chr_for_support == "*" or mate_is_unmapped:
+                if r2_aln_quality is not None and r2_aln_quality < min_r2_alignment_quality_score:
+                    r1_r2_support_status = r1_r2_support_str_not_supported_low_aln_score
+                elif r1_aln_chr_for_support == "*" or r2_aln_chr_for_support == "*" or mate_is_unmapped:
                     r1_r2_support_status = r1_r2_support_str_not_supported_not_aln
                 elif r2_aln_chr_for_support == "=" or r1_aln_chr_for_support == r2_aln_chr_for_support:
                     #distance must be within cutoff
@@ -2578,9 +2624,10 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
             aln_pos_window = int(line_start)/genome_map_resolution
             aln_pos_by_chr[line_chr][aln_pos_window] += 1
 
+            #changes to columns here should trigger an update at lines with the text AS COLUMNS ARE ADDED TO THE FINAL REPORT
             af1.write("\t".join([str(x) for x in [line_info, aln_pos, cut_pos, cut_direction, del_primer,
                       ins_target, insert_size, r1_r2_support_status, r1_r2_support_dist, r1_r2_orientation_str, 
-                      r1_aln_quality, r1_aln_mismatches, umi_dedup_key]]) + "\n")
+                      r1_aln_quality, r1_aln_mismatches, r2_aln_quality, r2_aln_mismatches, umi_dedup_key]]) + "\n")
 
         #done iterating through bam file
     #close assignments file
@@ -2855,6 +2902,7 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
     origin_depth_counts_long_primer = np.zeros(len(origin_seq)+1) #count reads covering each base of primer (for those with deletions within {long_distance})
     origin_depth_counts_long_total = 0 #count of total reads
 
+    #changes to columns here should trigger an update at lines with the text AS COLUMNS ARE ADDED TO THE FINAL REPORT
     read_id_ind = 0
     aln_ind = 1
     cut_pos_ind = 2
@@ -2867,7 +2915,9 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
     r1_r2_orientation_str_ind = 9
     r1_aln_quality_ind = 10
     r1_aln_mismatch_ind = 11
-    umi_dedup_key_ind = 12
+    r2_aln_quality_ind = 12
+    r2_aln_mismatch_ind = 13
+    umi_dedup_key_ind = 14
 
     # if experiment_had_UMIs, perform deduplication based on final cut point assignment instead of alignment position
     #   if dedup_by_final_cut_assignment_and_UMI is set:
@@ -2927,27 +2977,27 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
         old_head = fin.readline().strip()
         old_head_els = old_head.split("\t")
         head_to_print = "\t".join([str(x) for x in [
-                                old_head_els[read_id_ind],
-                                old_head_els[aln_ind],
-                                old_head_els[cut_pos_ind],
-                                old_head_els[cut_direction_ind],
-                                old_head_els[del_primer_ind],
-                                old_head_els[ins_target_ind],
+                                old_head_els[read_id_ind], # index 0
+                                old_head_els[aln_ind],           # 1
+                                old_head_els[cut_pos_ind],       # 2
+                                old_head_els[cut_direction_ind], # 3
+                                old_head_els[del_primer_ind],    # 4
+                                old_head_els[ins_target_ind],    # 5
                                 old_head_els[insert_size_ind],
                                 old_head_els[r1_r2_support_status_ind],
                                 old_head_els[r1_r2_support_dist_ind],
                                 old_head_els[r1_r2_orientation_str_ind],
-                                old_head_els[r1_aln_quality_ind],
+                                old_head_els[r1_aln_quality_ind], #10
                                 old_head_els[r1_aln_mismatch_ind],
-                                'r2 alignment quality',
-                                'r2_alignment_mismatches',
+                                old_head_els[r2_aln_quality_ind],
+                                old_head_els[r2_aln_mismatch_ind],
                                 old_head_els[umi_dedup_key_ind],
-                                'reads_with_same_umi_pos',
+                                'reads_with_same_umi_pos',        #15
                                 'final_cut_pos',
                                 'final_cut_indel',
                                 'indel_classification',
-                                'classification'
-                            ]])
+                                'classification'                  #19
+                            ]]) #changes to columns here should trigger an update at lines with the text AS COLUMNS ARE ADDED TO THE FINAL REPORT
         fout.write(head_to_print + "\n")
 
         for line in fin:
@@ -3001,12 +3051,6 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                 dedup_umi_read_sum_per_classification[final_classification+' '+indel_str] += 1
             dedup_umi_counts_per_classification[final_classification+' '+indel_str] += 1
 
-            r2_aln_quality = None
-            r2_aln_mismatches = None
-            read_id = line_id.split(" ")[0]
-            if read_id in r2_mate_info:
-                (r2_aln_quality, r2_aln_mismatches) = r2_mate_info[read_id]
-
             line_to_print = "\t".join([str(x) for x in [
                                     line_els[read_id_ind],
                                     line_els[aln_ind],
@@ -3020,15 +3064,15 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                                     line_els[r1_r2_orientation_str_ind],
                                     line_els[r1_aln_quality_ind],
                                     line_els[r1_aln_mismatch_ind],
-                                    r2_aln_quality,
-                                    r2_aln_mismatches,
+                                    line_els[r2_aln_quality_ind],
+                                    line_els[r2_aln_mismatch_ind],
                                     line_els[umi_dedup_key_ind],
                                     num_barcodes_seen_umi_pos,
                                     final_cut_point_and_direction,
                                     final_cut_indel,
                                     indel_str,
                                     final_classification
-                                ]])
+                                ]]) #changes to columns here should trigger an update at lines with the text AS COLUMNS ARE ADDED TO THE FINAL REPORT
 
             fout.write(line_to_print + "\n")
 
@@ -3098,7 +3142,6 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
         umi_gini_string = "#Final UMI GINI:\t"+str(umi_gini)+"\n"
     if not experiment_had_UMIs:
         umi_gini_string = '#Final UMI GINI:\tNA\t(UMIs not used in this experiment)'
-
 
     if dedup_by_final_cut_assignment_and_UMI:
         deduplication_plot_obj_root = root + ".deduplication_by_UMI_and_final_cut_assignment"
@@ -3733,7 +3776,6 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
     #make r1/r2/support plots
     r1_r2_support_plot_obj = None # plot of how many reads for which r1 and r2 support each other
     r1_r2_support_dist_plot_obj = None # plot of how far apart the r1/r2 supporting reads were aligned from each other
-    r1_r2_support_labels = [r1_r2_support_str_supported,r1_r2_support_str_not_supported_orientation,r1_r2_support_str_not_supported_distance,r1_r2_support_str_not_supported_diff_chrs,r1_r2_support_str_not_supported_not_aln]
 
     #check to make sure labels match
     for k in r1_r2_support_status_counts.keys():
@@ -4730,7 +4772,7 @@ def run_and_aggregate_crispresso(root,crispresso_infos,final_assignment_file,n_p
     with open(final_assignment_file,'r') as f_assignments, open(annotated_final_assignments_file,'w') as fout:
         head = f_assignments.readline().rstrip('\n')
         head_line_els = head.split("\t")
-        final_classification_ind = 19
+        final_classification_ind = 19 # AS COLUMNS ARE ADDED TO THE FINAL REPORT, THIS INDEX SHOULD BE UPDATED
         if head_line_els[final_classification_ind] != "classification":
             raise Exception("Couldn't parse final assignment file " + final_assignment_file)
         fout.write(head+"\tcrispresso_status\n")
