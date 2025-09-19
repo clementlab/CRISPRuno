@@ -1962,7 +1962,7 @@ def filter_on_primer(root,fastq_r1,fastq_r2,origin_seq,min_primer_aln_score,allo
         pie_values = []
         pie_labels = []
         for i in range(len(filter_labels)):
-            if values[i] > 0:
+            if isinstance(values[i], int) and values[i] > 0: # sometimes values[i] can be 'NA' if no reads were found
                 pie_values.append(values[i])
                 pie_labels.append(filter_labels[i]+"\n("+str(values[i])+")")
         ax.pie(pie_values, labels=pie_labels, autopct="%1.2f%%")
@@ -3177,7 +3177,7 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
         pie_values = []
         pie_labels = []
         for i in range(len(labels)):
-            if values[i] > 0:
+            if isinstance(values[i], int) and values[i] > 0: 
                 pie_values.append(values[i])
                 pie_labels.append(labels[i]+"\n("+str(values[i])+")")
         ax.pie(pie_values, labels=pie_labels, autopct="%1.2f%%")
@@ -3794,7 +3794,7 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
         pie_values = []
         pie_labels = []
         for i in range(len(r1_r2_support_labels)):
-            if values[i] > 0:
+            if isinstance(values[i], int) and values[i] > 0: 
                 pie_values.append(values[i])
                 pie_labels.append(r1_r2_support_labels[i]+"\n("+str(values[i])+")")
         ax.pie(pie_values, labels=pie_labels, autopct="%1.2f%%")
@@ -3889,7 +3889,7 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
         pie_values = []
         pie_labels = []
         for i in range(len(labels)):
-            if values[i] > 0:
+            if isinstance(values[i], int) and values[i] > 0: 
                 pie_values.append(values[i])
                 pie_labels.append(labels[i]+"\n("+str(values[i])+")")
         ax.pie(pie_values, labels=pie_labels, autopct="%1.2f%%")
@@ -4805,7 +4805,7 @@ def run_and_aggregate_crispresso(root,crispresso_infos,final_assignment_file,n_p
         pie_values = []
         pie_labels = []
         for i in range(len(labels)):
-            if values[i] > 0:
+            if isinstance(values[i], int) and values[i] > 0: 
                 pie_values.append(values[i])
                 pie_labels.append(labels[i]+"\n("+str(values[i])+")")
         ax.pie(pie_values, labels=pie_labels, autopct="%1.2f%%")
@@ -5085,7 +5085,7 @@ def make_final_summary(root, num_reads_input, post_UMI_regex_count, post_initial
         pie_values = []
         pie_labels = []
         for i in range(len(filter_labels)):
-            if values[i] > 0:
+            if isinstance(values[i], int) and values[i] > 0: 
                 pie_values.append(values[i])
                 pie_labels.append(filter_labels[i]+"\n("+str(values[i])+")")
         ax.pie(pie_values, labels=pie_labels, autopct="%1.2f%%")
