@@ -50,7 +50,7 @@ def processCRISPRuno(settings):
     assert_dependencies(
             cutadapt_command=settings['cutadapt_command'],
             samtools_command=settings['samtools_command'],
-            bowtie2_command=settings['bowtie2_command'],
+            aligner_command=settings['aligner_command'],
             crispresso_command=settings['crispresso_command'],
             casoffinder_command=settings['casoffinder_command']
             )
@@ -64,8 +64,8 @@ def processCRISPRuno(settings):
             fastq_r1=settings['fastq_r1'],
             samtools_command=settings['samtools_command'],
             genome=settings['genome'],
-            bowtie2_command=settings['bowtie2_command'],
-            bowtie2_genome=settings['bowtie2_genome'],
+            aligner_command=settings['aligner_command'],
+            aligner_genome=settings['aligner_genome'],
             can_use_previous_analysis=settings['can_use_previous_analysis']
             )
     logger.info('%d reads in input'%num_reads_input)
@@ -155,9 +155,9 @@ def processCRISPRuno(settings):
                     root=settings['root']+'.genomeAlignment',
                     fastq_r1=filtered_on_primer_fastq_r1,
                     fastq_r2=filtered_on_primer_fastq_r2,
-                    bowtie2_reference=settings['bowtie2_genome'],
-                    bowtie2_command=settings['bowtie2_command'],
-                    bowtie2_threads=settings['n_processes'],
+                    aligner_reference=settings['aligner_genome'],
+                    aligner_command=settings['aligner_command'],
+                    aligner_threads=settings['n_processes'],
                     analyze_multimap_assignments=settings['analyze_multimap_assignments'],
                     samtools_command=settings['samtools_command'],
                     keep_intermediate=settings['keep_intermediate'],
@@ -166,6 +166,11 @@ def processCRISPRuno(settings):
 
     if not settings['keep_intermediate']:
         for file_to_delete in [umi_fastq_r1,umi_fastq_r2,analyze_UMI_r1,analyze_UMI_r2,filtered_on_primer_fastq_r1,filtered_on_primer_fastq_r2]:
+            #don't delete input files provided by the user
+            if os.path.abspath(file_to_delete) == os.path.abspath(settings['fastq_r1']) or \
+                os.path.abspath(file_to_delete) == os.path.abspath(settings['fastq_r2']) or \
+                os.path.abspath(file_to_delete) == os.path.abspath(settings['fastq_umi']):
+                continue
             if file_to_delete == curr_r1_file: #don't delete the input file to use for CRISPResso
                 continue
             if file_to_delete is not None and os.path.exists(file_to_delete):
@@ -317,8 +322,14 @@ def processCRISPRuno(settings):
 
     if not settings['keep_intermediate']:
         if curr_r1_file is not None and os.path.exists(curr_r1_file):
-            logger.debug('Deleting intermediate file ' + curr_r1_file)
-            os.remove(curr_r1_file)
+            #don't delete input files provided by the user
+            if os.path.abspath(curr_r1_file) == os.path.abspath(settings['fastq_r1']) or \
+                os.path.abspath(curr_r1_file) == os.path.abspath(settings['fastq_r2']) or \
+                os.path.abspath(curr_r1_file) == os.path.abspath(settings['fastq_umi']):
+                pass
+            else:
+                logger.debug('Deleting intermediate file ' + curr_r1_file)
+                os.remove(curr_r1_file)
 
     if final_summary_plot_obj is not None:
         final_summary_plot_obj.order = 1
@@ -367,7 +378,7 @@ def parse_settings(args):
     parser.add_argument('--cleavage_offset', type=int, help='Position where cleavage occurs, for in-silico off-target search (relative to end of spacer seq -- for Cas9 this is -3)', default=-3)
 
     parser.add_argument('--genome', help='Genome sequence file for alignment. This should point to a file ending in ".fa", and the accompanying index file (".fai") should exist.', default=None)
-    parser.add_argument('--bowtie2_genome', help='Bowtie2-indexed genome file.',default=None)
+    parser.add_argument('--aligner_genome', help='Aligner-indexed genome file.',default=None)
 
     parser.add_argument('--fastq_r1', help='Input fastq r1 file. Reads in this file are primed from the provided primer sequence', default=None)
     parser.add_argument('--fastq_r2', help='Input fastq r2 file', default=None)
@@ -398,7 +409,7 @@ def parse_settings(args):
     a_group = parser.add_argument_group('Alignment cutoff parameters')
     a_group.add_argument('--min_alignment_quality_score', type=int, help='minimum alignment quality score to accept alignment', default=30)
     a_group.add_argument('--arm_min_matched_start_bases', type=int, help='Number of bases that are required to be matching (no indels or mismatches) at the beginning of the read on each "side" of the alignment. E.g. if arm_min_matched_start_bases is set to 5, the first and last 5bp of the read alignment would have to match exactly to the aligned location.', default=10)
-    a_group.add_argument('--arm_max_clipped_bases', type=int, help='Maximum number of clipped bases at the beginning of the alignment. Bowtie2 alignment marks reads on the beginning or end of the read as "clipped" if they do not align to the genome. This could arise from CRISPR-induced insertions, or bad alignments. ' + \
+    a_group.add_argument('--arm_max_clipped_bases', type=int, help='Maximum number of clipped bases at the beginning of the alignment. Bowtie2/HISAT2 alignment marks reads on the beginning or end of the read as "clipped" if they do not align to the genome. This could arise from CRISPR-induced insertions, or bad alignments. ' + \
         'We would expect to see clipped bases only on one side. This parameter sets the threshold for clipped bases on both sides of the read.  E.g. if arm_max_clipped_bases is 0, read alignments with more than 0bp on the right AND left side of the alignment would be discarded. An alignment with 5bp clipped on the left and 0bp clipped on the right would be accepted. An alignment with 5bp clipped on the left and 3bp clipped on the right would be discarded.', default=0)
     a_group.add_argument('--ignore_n', help='If set, "N" bases will be ignored. By default (False) N bases will count as mismatches in the number of bases required to match at each arm/side of the read', action='store_true')
     a_group.add_argument('--suppress_poor_alignment_filter', help='If set, reads with poor alignment (fewer than --arm_min_matched_start_bases matches at the alignment ends or more than --arm_max_clipped_bases on both sides of the read) are included in final analysis and counts. By default they are excluded.', action='store_true')
@@ -415,7 +426,7 @@ def parse_settings(args):
     p_group = parser.add_argument_group('Pipeline parameters')
     p_group.add_argument('--cutadapt_command', help='Command to run cutadapt', default='cutadapt')
     p_group.add_argument('--samtools_command', help='Command to run samtools', default='samtools')
-    p_group.add_argument('--bowtie2_command', help='Command to run bowtie2', default='bowtie2')
+    p_group.add_argument('--aligner_command', help='Command to run aligner (bowtie2 or hisat2)', default='bowtie2')
     p_group.add_argument('--crispresso_command', help='Command to run crispresso', default='CRISPResso')
     p_group.add_argument('--casoffinder_command', help='Command to run casoffinder', default='cas-offinder')
     p_group.add_argument('--n_processes', type=str, help='Number of processes to run on (may be set to "max")', default='1')
@@ -721,10 +732,10 @@ def parse_settings(args):
         settings['samtools_command'] = settings_file_args['samtools_command']
         settings_file_args.pop('samtools_command')
 
-    settings['bowtie2_command'] = cmd_args.bowtie2_command
-    if 'bowtie2_command' in settings_file_args:
-        settings['bowtie2_command'] = settings_file_args['bowtie2_command']
-        settings_file_args.pop('bowtie2_command')
+    settings['aligner_command'] = cmd_args.aligner_command
+    if 'aligner_command' in settings_file_args:
+        settings['aligner_command'] = settings_file_args['aligner_command']
+        settings_file_args.pop('aligner_command')
 
     settings['crispresso_command'] = cmd_args.crispresso_command
     if 'crispresso_command' in settings_file_args:
@@ -863,17 +874,17 @@ def parse_settings(args):
     if not os.path.isfile(genome_len_file):
         raise Exception('Error: The genome length file %s does not exist'%genome_len_file)
 
-    settings['bowtie2_genome'] = cmd_args.bowtie2_genome
-    if 'bowtie2_genome' in settings_file_args:
-        settings['bowtie2_genome'] = settings_file_args['bowtie2_genome']
-        settings_file_args.pop('bowtie2_genome')
+    settings['aligner_genome'] = cmd_args.aligner_genome
+    if 'aligner_genome' in settings_file_args:
+        settings['aligner_genome'] = settings_file_args['aligner_genome']
+        settings_file_args.pop('aligner_genome')
 
-    if settings['bowtie2_genome'] is None:
-        potential_bowtie2_path = re.sub('.fa$','',settings['genome'])
-        if os.path.isfile(potential_bowtie2_path+'.1.bt2'):
-            settings['bowtie2_genome']= potential_bowtie2_path
+    if settings['aligner_genome'] is None:
+        potential_aligner_path = re.sub('.fa$','',settings['genome'])
+        if os.path.isfile(potential_aligner_path+'.1.bt2'):
+            settings['aligner_genome']= potential_aligner_path
         else:
-            raise Exception('Error: bowtie2_genome is required in settings file, pointing to a bowtie2 genome (minus trailing .X.bt2)\nAlternatively, set genome to the .fa file in a bowtie2 directory.')
+            raise Exception('Error: aligner_genome is required in settings file, pointing to a aligner genome (minus trailing .X.bt2)\nAlternatively, set genome to the .fa file in a aligner directory.')
 
     if not settings['primer_seq']:
         parser.print_usage()
@@ -930,13 +941,13 @@ def parse_settings(args):
     return settings
 
 
-def assert_dependencies(cutadapt_command='cutadapt',samtools_command='samtools',bowtie2_command='bowtie2',crispresso_command='CRISPResso',casoffinder_command='cas-offinder'):
+def assert_dependencies(cutadapt_command='cutadapt',samtools_command='samtools',aligner_command='bowtie2',crispresso_command='CRISPResso',casoffinder_command='cas-offinder'):
     """
-    Asserts the presence of required software (faidx, bowtie2, casoffinder)
+    Asserts the presence of required software (faidx, bowtie2/hisat2, casoffinder)
 
     Args:
         samtools_command: location of samtools to run
-        bowtie2_command: location of bowtie2 to run
+        aligner_command: location of bowtie2 to run
         crispresso_command: location of crispresso to run
         casoffinder_command: location of casoffinder to run
 
@@ -959,9 +970,9 @@ def assert_dependencies(cutadapt_command='cutadapt',samtools_command='samtools',
     if not 'Usage: samtools faidx' in str(faidx_result):
         raise Exception('Error: samtools faidx is required')
 
-    #check bowtie2
+    #check bowtie2/hisat2
     try:
-        bowtie_result = subprocess.check_output('%s --version'%bowtie2_command, stderr=subprocess.STDOUT,shell=True).decode(sys.stdout.encoding)
+        bowtie_result = subprocess.check_output('%s --version'%aligner_command, stderr=subprocess.STDOUT,shell=True).decode(sys.stdout.encoding)
         m = re.search(r'bowtie2-align-s version (\d+)\.(\d+)\S+',bowtie_result)
         if m:
             bowtie_major_version = int(m.group(1))
@@ -969,9 +980,19 @@ def assert_dependencies(cutadapt_command='cutadapt',samtools_command='samtools',
             if bowtie_major_version < 2 or bowtie_minor_version < 4:
                     raise Exception('Bowtie version > 2.4 is required (version %s.%s found)'%(bowtie_major_version,bowtie_minor_version))
         else:
+            hisat_result = subprocess.check_output('%s --version'%aligner_command, stderr=subprocess.STDOUT,shell=True).decode(sys.stdout.encoding)
+            if 'hisat2' in hisat_result:
+                m = re.search(r'hisat2-align-s version (\d+)\.(\d+)\S+',hisat_result)
+                if m:
+                    hisat_major_version = int(m.group(1))
+                    hisat_minor_version = int(m.group(2))
+                    if hisat_major_version < 2 or hisat_minor_version < 1:
+                        raise Exception('Hisat2 version > 2.1 is required (version %s.%s found)'%(hisat_major_version,hisat_minor_version))
+                else:
+                    raise Exception('Hisat2 version cannot be found')
             raise Exception('Bowtie2 version cannot be found')
     except Exception:
-        raise Exception('Error: bowtie2 is required')
+        raise Exception('Error: ' + aligner_command + ' is required')
 
     #check crispresso
     try:
@@ -1143,7 +1164,7 @@ def get_cut_sites_casoffinder(root,genome,pam,guides,cleavage_offset,num_mismatc
 
     return casoffinder_cut_sites, casoffinder_cut_annotations
 
-def prep_input(root, primer_seq, min_primer_length, guide_seqs, cleavage_offset, fastq_r1, samtools_command, genome, bowtie2_command, bowtie2_genome, additional_cut_site_file=None, can_use_previous_analysis=False, suppress_file_output=False):
+def prep_input(root, primer_seq, min_primer_length, guide_seqs, cleavage_offset, fastq_r1, samtools_command, genome, aligner_command, aligner_genome, additional_cut_site_file=None, can_use_previous_analysis=False, suppress_file_output=False):
     """
     Prepares primer info by identifying genomic location if possible and calculates statistics by analyzing input fastq_r1 file
     Prepares cut info by aligning guides to the genome
@@ -1160,8 +1181,8 @@ def prep_input(root, primer_seq, min_primer_length, guide_seqs, cleavage_offset,
         fastq_r1: input fastq
         samtools_command: location of samtools to run
         genome: location of genome to extract sequence from
-        bowtie2_command: location of bowtie2 to run
-        bowtie2_genome: bowtie2-indexed genome to align to
+        aligner_command: location of bowtie2/hisat2 aligner to run
+        aligner_genome: aligner-indexed genome to align to
         additional_cut_site_file: Path to a file containing additional cut site annotations. This file should have five tab-separated columns. 1) chromosome of the cut site 2) position of the cut site 3) guide alignment orientation with respect to the genome (either "FW" or "RC") 4) guide sequence not including the PAM 5) cut annotation (e.g. "Programmed" - this will appear in reports)
         can_use_previous_analysis: boolean for whether we can use previous analysis or whether the params have changed and we have to rerun from scratch
         suppress_file_output: suppress writing info file (useful for debugging/testing)
@@ -1253,7 +1274,12 @@ def prep_input(root, primer_seq, min_primer_length, guide_seqs, cleavage_offset,
     primer_is_rc = 0
     #attempt to align primer to genome
     logger.info('Finding genomic coordinates of primer %s'%(primer_seq))
-    primer_aln_cmd = '%s --no-sq --seed 2248 --end-to-end -x %s -c %s' %(bowtie2_command,bowtie2_genome,primer_seq)
+    if 'bowtie2' in aligner_command:
+        primer_aln_cmd = '%s --no-sq --seed 2248 --end-to-end -x %s -c %s' %(aligner_command,aligner_genome,primer_seq)
+    elif 'hisat2' in aligner_command:
+        primer_aln_cmd = '%s --no-spliced-alignment --seed 2248 -x %s -c %s' %(aligner_command,aligner_genome,primer_seq)
+    else:
+        raise Exception('Unsupported aligner command %s. Only bowtie2 and hisat2 are supported'%(aligner_command))
     logger.debug(primer_aln_cmd)
     primer_aln_results = subprocess.check_output(primer_aln_cmd,shell=True,stderr=subprocess.STDOUT).decode(sys.stdout.encoding).split("\n")
     logger.debug(primer_aln_results)
@@ -1282,7 +1308,12 @@ def prep_input(root, primer_seq, min_primer_length, guide_seqs, cleavage_offset,
 
     for guide_seq in guide_seqs:
         logger.info('Finding genomic coordinates of guide %s'%(guide_seq))
-        guide_aln_cmd = '%s --no-sq --seed 2248 --end-to-end -x %s -c %s' %(bowtie2_command,bowtie2_genome,guide_seq)
+        if 'bowtie2' in aligner_command:
+            guide_aln_cmd = '%s --no-sq --seed 2248 --end-to-end -x %s -c %s' %(aligner_command,aligner_genome,guide_seq)
+        elif 'hisat2' in aligner_command:
+            guide_aln_cmd = '%s --no-sq --seed 2248 --no-spliced-alignment -x %s -c %s' %(aligner_command,aligner_genome,guide_seq)
+        else:
+            raise Exception('Unsupported aligner command %s. Only bowtie2 and hisat2 are supported'%(aligner_command))
         logger.debug(guide_aln_cmd)
         guide_aln_results = subprocess.check_output(guide_aln_cmd,shell=True,stderr=subprocess.STDOUT).decode(sys.stdout.encoding).split("\n")
         logger.debug(guide_aln_results)
@@ -1318,7 +1349,7 @@ def prep_input(root, primer_seq, min_primer_length, guide_seqs, cleavage_offset,
             cut_sites.append(key)
             cut_annotations[key] = ['Programmed','Not-origin',guide_is_rc_str,guide_seq]
         else:
-            logger.warning('Bowtie alignment results:')
+            logger.warning(aligner_command + ' alignment results:')
             logger.warning(guide_aln_results)
             raise Exception('Could not find unique genomic coordinates for guide %s'%guide_seq)
 
@@ -1664,7 +1695,7 @@ def analyze_UMIs_initial(root,fastq_r1,fastq_r2,umi_regex,dedup_input_on_UMI=Fal
         fout = open(root+".umiCounts.txt","w")
         umi_regex_info_str = ''
         if umi_regex is not None:
-            umi_regex_info_str = 'Only valid UMIs matching the regex %s (%s) are reported here'%(umi_regex,umi_regex_str)
+            umi_regex_info_str = 'Only valid UMIs matching the regex %s (%s) are reported here'%(umi_regex,umi_regex_string)
         fout.write('#UMI: the UMI sequence. '+umi_regex_info_str+'\n')
         fout.write('#seen_count: the number of times the UMI was seen in the input (the same UMI may be paired with reads with different sequences)\n')
         fout.write('#printed_count: the number of times the UMI/read pair printed was seen in the input\n')
@@ -2000,7 +2031,7 @@ def filter_on_primer(root,fastq_r1,fastq_r2,origin_seq,min_primer_aln_score,allo
 
     return(filtered_on_primer_fastq_r1,filtered_on_primer_fastq_r2,post_trim_read_count,filter_on_primer_plot_obj)
 
-def align_reads(root,fastq_r1,fastq_r2,bowtie2_reference,bowtie2_command='bowtie2',bowtie2_threads=1,use_old_bowtie=False,analyze_multimap_assignments=False,samtools_command='samtools',keep_intermediate=False,can_use_previous_analysis=False):
+def align_reads(root,fastq_r1,fastq_r2,aligner_reference,aligner_command='bowtie2',aligner_threads=1,use_old_bowtie=False,analyze_multimap_assignments=False,samtools_command='samtools',keep_intermediate=False,can_use_previous_analysis=False):
     """
     Aligns reads to the provided reference
 
@@ -2008,11 +2039,11 @@ def align_reads(root,fastq_r1,fastq_r2,bowtie2_reference,bowtie2_command='bowtie
         root: root for written files
         fastq_r1: fastq_r1 to align
         fastq_r2: fastq_r2 to align
-        bowtie2_reference: bowtie2 reference to align to (either artificial targets or reference)
-        bowtie2_command: location of bowtie2 to run
-        bowtie2_threads: number of threads to run bowtie2 with
+        aligner_reference: bowtie2/hisat2 reference to align to (either artificial targets or reference)
+        aligner_command: location of bowtie2/hisat2 to run
+        aligner_threads: number of threads to run bowtie2/hisat2 with
         use_old_bowtie: boolean for whether to use old bowtie2 version. Versions before v2.3.4.2 didn't implement the '--soft-clipped-unmapped-tlen' option
-        analyze_multimap_assignments: if true, bowtie will be run in multimapping mode (-a option) and the output will be analyzed for multimapping assignments
+        analyze_multimap_assignments: if true, bowtie2/hisat2 will be run in multimapping mode (-a option) and the output will be analyzed for multimapping assignments
         samtools_command: location of samtools to run
         keep_intermediate: whether to keep intermediate files (if False, intermediate files will be deleted)
         can_use_previous_analysis: boolean for whether we can use previous analysis or whether the params have changed and we have to rerun from scratch
@@ -2048,10 +2079,16 @@ def align_reads(root,fastq_r1,fastq_r2,bowtie2_reference,bowtie2_command='bowtie
         multimap_samtools_option = "-F 256 " #filter out secondary alignments
 
 
-    bowtie_log = root + '.bowtie2Log'
+    aligner_log = root + '.alignerLog'
     if fastq_r2 is not None: #paired-end reads
-        logger.info('Aligning paired reads using %s'%(bowtie2_command))
-        aln_command = f'{bowtie2_command} --seed 2248 --sam-no-qname-trunc --very-sensitive-local {tlen_option} {multimap_aln_option} --threads {bowtie2_threads} -x {bowtie2_reference} -1 {fastq_r1} -2 {fastq_r2} | {samtools_command} view {multimap_samtools_option} -Shu - | {samtools_command} sort -o {mapped_bam_file} - && {samtools_command} index {mapped_bam_file}'
+        logger.info('Aligning paired reads using %s'%(aligner_command))
+        if 'bowtie2' in aligner_command.lower():
+            aln_command = f'{aligner_command} --seed 2248 --sam-no-qname-trunc --very-sensitive-local {tlen_option} {multimap_aln_option} --threads {aligner_threads} -x {aligner_reference} -1 {fastq_r1} -2 {fastq_r2} | {samtools_command} view {multimap_samtools_option} -Shu - | {samtools_command} sort -o {mapped_bam_file} - && {samtools_command} index {mapped_bam_file}'
+        elif 'hisat2' in aligner_command.lower():
+            aln_command = f'{aligner_command} --seed 2248 --no-spliced-alignment --very-sensitive {tlen_option} {multimap_aln_option} --threads {aligner_threads} -x {aligner_reference} -1 {fastq_r1} -2 {fastq_r2} | {samtools_command} view {multimap_samtools_option} -Shu - | {samtools_command} sort -o {mapped_bam_file} - && {samtools_command} index {mapped_bam_file}'
+        else:
+            raise Exception('Unknown aligner command "%s". Only bowtie2 and hisat2 are supported.'%aligner_command)
+
         logger.debug(aln_command)
         aln_result = subprocess.check_output(aln_command,shell=True,stderr=subprocess.STDOUT).decode(sys.stdout.encoding)
         if 'error' in aln_result.lower():
@@ -2059,19 +2096,17 @@ def align_reads(root,fastq_r1,fastq_r2,bowtie2_reference,bowtie2_command='bowtie
             raise Exception('Alignment error: ' + aln_result)
 
         logger.debug(aln_result)
-        with open (bowtie_log,'w') as lout:
+        with open (aligner_log,'w') as lout:
             lout.write('\nAligning paired reads\n===\nCommand used:\n===\n%s\n===\nOutput:\n===\n%s'%(aln_command,aln_result))
     #unpaired reads
     else:
-        logger.info('Aligning single-end reads using %s'%(bowtie2_command))
-        aln_command = '{bowtie2_command} --seed 2248 --sam-no-qname-trunc --very-sensitive-local {tlen_option} --threads {bowtie2_threads} -x {bowtie2_reference} -U {fastq_r1} | {samtools_command} view -F 256 -Shu - | {samtools_command} sort -o {mapped_bam_file} - && {samtools_command} index {mapped_bam_file}'.format(
-                bowtie2_command=bowtie2_command,
-                tlen_option=tlen_option,
-                bowtie2_threads=bowtie2_threads,
-                bowtie2_reference=bowtie2_reference,
-                fastq_r1=fastq_r1,
-                samtools_command=samtools_command,
-                mapped_bam_file=mapped_bam_file)
+        logger.info('Aligning single-end reads using %s'%(aligner_command))
+        if 'bowtie2' in aligner_command.lower():
+            aln_command = f'{aligner_command} --seed 2248 --sam-no-qname-trunc --very-sensitive-local {tlen_option} --threads {aligner_threads} -x {aligner_reference} -U {fastq_r1} | {samtools_command} view -F 256 -Shu - | {samtools_command} sort -o {mapped_bam_file} - && {samtools_command} index {mapped_bam_file}'
+        elif 'hisat2' in aligner_command.lower():
+            aln_command = f'{aligner_command} --seed 2248 --no-spliced-alignment --very-sensitive {tlen_option} --threads {aligner_threads} -x {aligner_reference} -U {fastq_r1} | {samtools_command} view -F 256 -Shu - | {samtools_command} sort -o {mapped_bam_file} - && {samtools_command} index {mapped_bam_file}'
+        else:
+            raise Exception('Unknown aligner command "%s". Only bowtie2 and hisat2 are supported.'%aligner_command)
         logger.debug(aln_command)
         aln_result = subprocess.check_output(aln_command,shell=True,stderr=subprocess.STDOUT).decode(sys.stdout.encoding)
         if 'error' in aln_result.lower():
@@ -2079,7 +2114,7 @@ def align_reads(root,fastq_r1,fastq_r2,bowtie2_reference,bowtie2_command='bowtie
             raise Exception('Alignment error: ' + aln_result)
 
         logger.debug(aln_result)
-        with open (bowtie_log,'w') as lout:
+        with open (aligner_log,'w') as lout:
             lout.write('\nAligning single-end reads\n===\nCommand used:\n===\n%s\n===\nOutput:\n===\n%s'%(aln_command,aln_result))
 
 
