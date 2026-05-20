@@ -881,10 +881,12 @@ def parse_settings(args):
 
     if settings['aligner_genome'] is None:
         potential_aligner_path = re.sub('.fa$','',settings['genome'])
-        if os.path.isfile(potential_aligner_path+'.1.bt2'):
+        if os.path.isfile(potential_aligner_path+'.1.bt2') and 'bowtie2' in settings['aligner_command']:
+            settings['aligner_genome']= potential_aligner_path
+        elif os.path.isfile(potential_aligner_path+'.1.ht2') and 'hisat2' in settings['aligner_command']:
             settings['aligner_genome']= potential_aligner_path
         else:
-            raise Exception('Error: aligner_genome is required in settings file, pointing to a aligner genome (minus trailing .X.bt2)\nAlternatively, set genome to the .fa file in a aligner directory.')
+            raise Exception('Error: aligner_genome is required in settings file, pointing to an aligner genome (minus trailing .X.bt2)\nAlternatively, set genome to the .fa file in a aligner directory.')
 
     if not settings['primer_seq']:
         parser.print_usage()
@@ -990,7 +992,9 @@ def assert_dependencies(cutadapt_command='cutadapt',samtools_command='samtools',
                         raise Exception('Hisat2 version > 2.1 is required (version %s.%s found)'%(hisat_major_version,hisat_minor_version))
                 else:
                     raise Exception('Hisat2 version cannot be found')
-            raise Exception('Bowtie2 version cannot be found')
+            else:
+                raise Exception('Error: ' + aligner_command + ' is required')
+
     except Exception:
         raise Exception('Error: ' + aligner_command + ' is required')
 
@@ -1895,12 +1899,8 @@ def filter_on_primer(root,fastq_r1,fastq_r2,origin_seq,min_primer_aln_score,allo
                 if filter_on_primer_plot_obj_str != "" and filter_on_primer_plot_obj_str != "None":
                     filter_on_primer_plot_obj = PlotObject.from_json(filter_on_primer_plot_obj_str)
 
-                if os.path.exists(filtered_on_primer_fastq_r1):
-                    logger.info('Using %d previously-filtered fastq sequences trimmed for primers'%post_trim_read_count)
-
-                    return(filtered_on_primer_fastq_r1,filtered_on_primer_fastq_r2,post_trim_read_count,filter_on_primer_plot_obj)
-                else:
-                    logger.debug('File %s does not exist.'%filtered_on_primer_fastq_r1)
+                logger.info('Using %d previously-filtered fastq sequences trimmed for primers'%post_trim_read_count)
+                return(filtered_on_primer_fastq_r1,filtered_on_primer_fastq_r2,post_trim_read_count,filter_on_primer_plot_obj)
 
         if not os.path.isfile(fastq_r1):
             raise Exception('Cannot find input fastq r1 file for filtering (%s). Delete intermediate files and try again.'%fastq_r1)
@@ -2066,10 +2066,10 @@ def align_reads(root,fastq_r1,fastq_r2,aligner_reference,aligner_command='bowtie
                 logger.info('Using previously-performed alignment')
                 return mapped_bam_file
         logger.info('Could not recover previously-performed alignment. Reanalyzing.')
-
-    tlen_option = "--soft-clipped-unmapped-tlen"
-    if use_old_bowtie:
-        tlen_option = ""
+        if not os.path.isfile(fastq_r1):
+            raise Exception('Cannot find input fastq r1 file for alignment (%s). Delete intermediate files and try again.'%fastq_r1)
+        if fastq_r2 and not os.path.isfile(fastq_r2):
+            raise Exception('Cannot find input fastq r2 file for alignment (%s). Delete intermediate files and try again.'%fastq_r2)
 
     multimap_aln_option = ""
     multimap_samtools_option = ""
@@ -2083,9 +2083,9 @@ def align_reads(root,fastq_r1,fastq_r2,aligner_reference,aligner_command='bowtie
     if fastq_r2 is not None: #paired-end reads
         logger.info('Aligning paired reads using %s'%(aligner_command))
         if 'bowtie2' in aligner_command.lower():
-            aln_command = f'{aligner_command} --seed 2248 --sam-no-qname-trunc --very-sensitive-local {tlen_option} {multimap_aln_option} --threads {aligner_threads} -x {aligner_reference} -1 {fastq_r1} -2 {fastq_r2} | {samtools_command} view {multimap_samtools_option} -Shu - | {samtools_command} sort -o {mapped_bam_file} - && {samtools_command} index {mapped_bam_file}'
+            aln_command = f'{aligner_command} --seed 2248 --sam-no-qname-trunc --very-sensitive-local {multimap_aln_option} --threads {aligner_threads} -x {aligner_reference} -1 {fastq_r1} -2 {fastq_r2} | {samtools_command} view {multimap_samtools_option} -Shu - | {samtools_command} sort -o {mapped_bam_file} - && {samtools_command} index {mapped_bam_file}'
         elif 'hisat2' in aligner_command.lower():
-            aln_command = f'{aligner_command} --seed 2248 --no-spliced-alignment --very-sensitive {tlen_option} {multimap_aln_option} --threads {aligner_threads} -x {aligner_reference} -1 {fastq_r1} -2 {fastq_r2} | {samtools_command} view {multimap_samtools_option} -Shu - | {samtools_command} sort -o {mapped_bam_file} - && {samtools_command} index {mapped_bam_file}'
+            aln_command = f'{aligner_command} --seed 2248 --no-spliced-alignment --very-sensitive {multimap_aln_option} --threads {aligner_threads} -x {aligner_reference} -1 {fastq_r1} -2 {fastq_r2} | {samtools_command} view {multimap_samtools_option} -Shu - | {samtools_command} sort -o {mapped_bam_file} - && {samtools_command} index {mapped_bam_file}'
         else:
             raise Exception('Unknown aligner command "%s". Only bowtie2 and hisat2 are supported.'%aligner_command)
 
@@ -2503,7 +2503,10 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                     fout_discarded.write(line_els[0]+'\tUnmapped\t'+line_els[1]+"\n")
                 continue
 
-            (line_info, primer_trimmed_len_str) = line_els[0].split(" primer_len=")
+            try:
+                (line_info, primer_trimmed_len_str) = line_els[0].split("_primer_len=")
+            except:
+                raise Exception('Error parsing primer length from read name: ' + line_els[0])
             primer_trimmed_len = int(primer_trimmed_len_str)
 
             left_matches = 0
@@ -2851,8 +2854,8 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
                             cut_classification_lookup['%s:%s:%s'%(chrom,pos,'right')] = 'Linear'
                             cut_classification_lookup['%s:%s:%s'%(chrom,pos,'left')] = 'Chimera'
                         else:
-                            cut_classification_lookup['%s:%s:%s'%(chrom,pos,'left')] = this_anno[0] + ' large deletion'
-                            cut_classification_lookup['%s:%s:%s'%(chrom,pos,'right')] = this_anno[0] + ' large inversion'
+                            cut_classification_lookup['%s:%s:%s'%(chrom,pos,'right')] = this_anno[0] + ' large deletion'
+                            cut_classification_lookup['%s:%s:%s'%(chrom,pos,'left')] = this_anno[0] + ' large inversion'
 
                     else: # origin direction is right
                         if pos == origin_cut_pos:
@@ -5434,7 +5437,8 @@ def trim_primers_single(fastq_r1,fastq_r1_trimmed,min_primer_aln_score,allow_ind
         if len(primer_seq) > min_primer_length:
             post_trim_read_count += 1
             new_f1_qual_line = f1_qual_line[len(primer_seq):]
-            new_f1_id_line = f1_id_line + ' primer_len=' + str(trimmed_primer_pos + 1) # trimmed primer len is (trimmed_primer_pos + 1)
+            new_f1_id_line = f1_id_line + '_primer_len=' + str(trimmed_primer_pos + 1) # trimmed primer len is (trimmed_primer_pos + 1)
+            new_f1_id_line = new_f1_id_line.replace(' ', '_')
 
             f1_out.write(new_f1_id_line + "\n" + trimmed_seq + "\n" + f1_plus_line + new_f1_qual_line + "\n")
         elif len(primer_seq) > 0:
@@ -5505,12 +5509,13 @@ def trim_primers_pair(fastq_r1,fastq_r2,fastq_r1_trimmed,fastq_r2_trimmed,min_pr
         if len(primer_seq) > min_primer_length:
             post_trim_read_count += 1
             new_f1_qual_line = f1_qual_line[len(primer_seq):]
-            new_f1_id_line = f1_id_line + ' primer_len=' + str(trimmed_primer_pos + 1) # trimmed primer len is (trimmed_primer_pos + 1)
+            new_f1_id_line = f1_id_line + '_primer_len=' + str(trimmed_primer_pos + 1) # trimmed primer len is (trimmed_primer_pos + 1)
+            new_f1_id_line = new_f1_id_line.replace(' ', '_')
 
             f2_trimmed_seq, f2_primer_seq = trim_right_primer_from_read(f2_seq_line,ssw_align_primer_rc,min_primer_aln_score,allow_indels_in_origin_aln)
             new_f2_qual_line = f2_qual_line[len(f2_primer_seq):]
             f1_out.write(new_f1_id_line + "\n" + trimmed_seq + "\n" + f1_plus_line + new_f1_qual_line + "\n")
-            f2_out.write(f2_id_line + "\n" + f2_trimmed_seq + "\n" + f2_plus_line + new_f2_qual_line + "\n")
+            f2_out.write(new_f1_id_line + "\n" + f2_trimmed_seq + "\n" + f2_plus_line + new_f2_qual_line + "\n")
         elif len(primer_seq) > 0:
             too_short_read_count += 1
         else:
