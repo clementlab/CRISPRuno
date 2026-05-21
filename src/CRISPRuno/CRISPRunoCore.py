@@ -2550,8 +2550,11 @@ def make_final_read_assignments(root,genome_mapped_bam,origin_seq,
 
             line_chr = line_els[2]
             line_start = int(line_els[3])
-            seq_len = len(seq) - (start_clipped + end_clipped)
-            line_end = line_start+(seq_len-1)
+            ref_span = 0
+            for length, op in re.findall(r'(\d+)([MIDNSHPX=])', cigar_str):
+                if op in ('M', 'D', 'N', 'X', '='):
+                    ref_span += int(length)
+            line_end = line_start + ref_span - 1
             cut_direction = "right"
             if is_rc:
                 tmp = line_end
